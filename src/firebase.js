@@ -3,12 +3,13 @@ import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, dele
 
 // TODO: Firebase コンソールから取得した設定に置き換えてください
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyB6XIkwSU2QuXpKFrn38JF1i8GE4TKNO20",
+  authDomain: "otterplan.firebaseapp.com",
+  projectId: "otterplan",
+  storageBucket: "otterplan.firebasestorage.app",
+  messagingSenderId: "726094606367",
+  appId: "1:726094606367:web:3e45e1ef16e2ba1beb652a",
+  measurementId: "G-JZVCB6LS64"
 };
 
 const app = initializeApp(firebaseConfig);
