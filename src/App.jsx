@@ -151,6 +151,24 @@ export default function App() {
     }));
   };
 
+  const updateCandidatePart = (id, part, partValue) => {
+    setEventData(prev => ({
+      ...prev,
+      candidates: prev.candidates.map(c => {
+        if (c.id !== id) return c;
+        const current = c.datetime || '';
+        const [datePart, timePart] = current ? current.split('T') : ['', ''];
+        const [hour, minute] = timePart ? timePart.split(':') : ['', ''];
+        let newDate = datePart, newHour = hour || '12', newMinute = minute || '00';
+        if (part === 'date') newDate = partValue;
+        if (part === 'hour') newHour = partValue;
+        if (part === 'minute') newMinute = partValue;
+        if (!newDate) return c;
+        return { ...c, datetime: `${newDate}T${newHour.padStart(2, '0')}:${newMinute.padStart(2, '0')}` };
+      })
+    }));
+  };
+  
   // Publish event
   const publishEvent = async () => {
     if (!eventData.title.trim()) {
@@ -563,6 +581,34 @@ export default function App() {
               {eventData.candidates.map((c, i) => (
                 <div key={c.id} style={styles.candidateRow}>
                   <span style={styles.candidateNum}>{String(i + 1).padStart(2, '0')}</span>
+                  <div style={styles.datetimeGroup}>
+                    <input
+                      type="date"
+                      style={styles.dateInput}
+                      value={c.datetime ? c.datetime.split('T')[0] : ''}
+                      onChange={e => updateCandidatePart(c.id, 'date', e.target.value)}
+                    />
+                    <select
+                      style={styles.timeSelect}
+                      value={c.datetime ? c.datetime.split('T')[1]?.split(':')[0] || '' : ''}
+                      onChange={e => updateCandidatePart(c.id, 'hour', e.target.value)}
+                    >
+                      <option value="" disabled>時</option>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={String(i).padStart(2, '0')}>{i}時</option>
+                      ))}
+                    </select>
+                    <select
+                      style={styles.timeSelect}
+                      value={c.datetime ? c.datetime.split('T')[1]?.split(':')[1] || '' : ''}
+                      onChange={e => updateCandidatePart(c.id, 'minute', e.target.value)}
+                    >
+                      <option value="" disabled>分</option>
+                      {[0, 30].map(m => (
+                        <option key={m} value={String(m).padStart(2, '0')}>{String(m).padStart(2, '0')}分</option>
+                      ))}
+                    </select>
+                  </div>
                   <input
                     type="datetime-local"
                     step="600"
@@ -1178,6 +1224,8 @@ const styles = {
 
   errorBanner: { padding: '12px 16px', background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 13, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   errorClose: { background: 'none', border: 'none', color: '#f87171', fontSize: 18, cursor: 'pointer' },
+  
+  card: {},
 
   card: { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: 32 },
   cardLabel: { fontSize: 10, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', marginBottom: 8 },
@@ -1196,6 +1244,9 @@ const styles = {
   candidateRow: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#0a0a0a' },
   candidateNum: { fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', width: 24 },
   datetimeInput: { flex: 1, padding: '10px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 14, outline: 'none', colorScheme: 'dark' },
+  datetimeGroup: { display: 'flex', flex: 1, gap: 8, alignItems: 'center' },
+  dateInput: { flex: 1, padding: '10px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 14, outline: 'none', colorScheme: 'dark' },
+  timeSelect: { padding: '10px 8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 14, outline: 'none', cursor: 'pointer', colorScheme: 'dark', appearance: 'auto', WebkitAppearance: 'menulist', minWidth: 70 },
   removeBtn: { width: 28, height: 28, background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' },
   removeLine1: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
   removeLine2: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(-45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
