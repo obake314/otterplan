@@ -20,7 +20,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isOrganizer, setIsOrganizer] = useState(true);
-  
+
   // Event data
   const [eventId, setEventId] = useState(null);
   const [eventData, setEventData] = useState({
@@ -30,7 +30,7 @@ export default function App() {
   });
   const [fixedCandidateId, setFixedCandidateId] = useState(null);
   const [venue, setVenue] = useState(null);
-  
+
   // Venue input (create mode)
   const [venueEnabled, setVenueEnabled] = useState(false);
   const [venueInput, setVenueInput] = useState({
@@ -40,13 +40,13 @@ export default function App() {
     imageUrl: '',
     reservationName: ''
   });
-  
+
   // Responses
   const [responses, setResponses] = useState([]);
   const [responderName, setResponderName] = useState('');
   const [responderComment, setResponderComment] = useState('');
   const [answers, setAnswers] = useState({});
-  
+
   // Venue search
   const [showVenueFinder, setShowVenueFinder] = useState(false);
   const [venueSearching, setVenueSearching] = useState(false);
@@ -55,22 +55,38 @@ export default function App() {
   const [venueBudget, setVenueBudget] = useState('');
   const [venueResults, setVenueResults] = useState([]);
   const [selectedVenueIndex, setSelectedVenueIndex] = useState(null);
-  
+
   // UI state
   const [activeTab, setActiveTab] = useState('status');
   const [copied, setCopied] = useState(false);
-  
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [currentUser, setCurrentUser] = useState('');
+
+  // DM state
+  const [dmTarget, setDmTarget] = useState(null);
+  const [dmInput, setDmInput] = useState('');
+  const [directMessages, setDirectMessages] = useState([]);
+  const [showDmPanel, setShowDmPanel] = useState(false);
+
+  // Share state
+  const [showShareMenu, setShowShareMenu] = useState(null);
+  const [showFixedShare, setShowFixedShare] = useState(false);
+  const [fixedCopied, setFixedCopied] = useState(false);
+
   // Load event from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
     const org = params.get('org');
-    
+
     if (id) {
       loadEvent(id, org === '1');
     }
   }, []);
-  
+
   const loadEvent = async (id, isOrg) => {
     setLoading(true);
     try {
@@ -86,12 +102,30 @@ export default function App() {
       setResponses(data.responses || []);
       setIsOrganizer(isOrg);
       setView('results');
+
+      // Load chat messages
+      try {
+        const chatData = await api(`chat?event_id=${id}`);
+        setChatMessages(chatData.messages || []);
+      } catch (e) {
+        console.error('Chat load error:', e);
+      }
+
+      // Load DMs if organizer
+      if (isOrg) {
+        try {
+          const dmData = await api(`dms?event_id=${id}`);
+          setDirectMessages(dmData.messages || []);
+        } catch (e) {
+          console.error('DM load error:', e);
+        }
+      }
     } catch (err) {
       setError('イベントが見つかりません: ' + err.message);
     }
     setLoading(false);
   };
-  
+
   // Candidates
   const addCandidate = () => {
     if (eventData.candidates.length >= 10) return;
@@ -101,7 +135,7 @@ export default function App() {
       candidates: [...prev.candidates, { id: newId, datetime: '' }]
     }));
   };
-  
+
   const removeCandidate = (id) => {
     if (eventData.candidates.length <= 1) return;
     setEventData(prev => ({
@@ -109,14 +143,14 @@ export default function App() {
       candidates: prev.candidates.filter(c => c.id !== id)
     }));
   };
-  
+
   const updateCandidate = (id, value) => {
     setEventData(prev => ({
       ...prev,
       candidates: prev.candidates.map(c => c.id === id ? { ...c, datetime: value } : c)
     }));
   };
-  
+
   // Publish event
   const publishEvent = async () => {
     if (!eventData.title.trim()) {
@@ -128,16 +162,15 @@ export default function App() {
       setError('イベント名は255文字以内で入力してください');
       return;
     }
-    
+
     const validCandidates = eventData.candidates.filter(c => c.datetime);
     if (validCandidates.length === 0) {
       setError('候補日時を1つ以上入力してください');
       return;
     }
-    
+
     setLoading(true);
     try {
-      // 会場情報を準備
       const venueData = venueEnabled && venueInput.name ? {
         name: venueInput.name,
         address: venueInput.address,
@@ -145,7 +178,7 @@ export default function App() {
         imageUrl: venueInput.imageUrl,
         reservationName: venueInput.reservationName
       } : null;
-      
+
       const result = await api('events', {
         method: 'POST',
         body: {
@@ -155,14 +188,13 @@ export default function App() {
           venue: venueData
         }
       });
-      
+
       setEventId(result.id);
       setEventData(prev => ({ ...prev, candidates: validCandidates }));
       setVenue(venueData);
       setIsOrganizer(true);
       setView('results');
-      
-      // Update URL
+
       const url = new URL(window.location);
       url.searchParams.set('id', result.id);
       url.searchParams.set('org', '1');
@@ -172,7 +204,7 @@ export default function App() {
     }
     setLoading(false);
   };
-  
+
   // Fix/Unfix candidate
   const fixCandidate = async (candidateId) => {
     try {
@@ -181,11 +213,12 @@ export default function App() {
         body: { id: eventId, fixed_candidate_id: candidateId }
       });
       setFixedCandidateId(candidateId);
+      setShowFixedShare(true);
     } catch (err) {
       setError('更新エラー: ' + err.message);
     }
   };
-  
+
   const unfixCandidate = async () => {
     try {
       await api('events', {
@@ -193,11 +226,12 @@ export default function App() {
         body: { id: eventId, fixed_candidate_id: null }
       });
       setFixedCandidateId(null);
+      setShowFixedShare(false);
     } catch (err) {
       setError('更新エラー: ' + err.message);
     }
   };
-  
+
   // Submit response
   const submitResponse = async () => {
     if (!responderName.trim()) {
@@ -209,12 +243,12 @@ export default function App() {
       setError('名前は100文字以内で入力してください');
       return;
     }
-    
+
     if (Object.keys(answers).length === 0) {
       setError('1つ以上の日程に回答してください');
       return;
     }
-    
+
     setLoading(true);
     try {
       await api('responses', {
@@ -226,11 +260,11 @@ export default function App() {
           answers
         }
       });
-      
-      // Reload responses
+
       const data = await api(`events?id=${eventId}`);
       setResponses(data.responses || []);
-      
+
+      setCurrentUser(responderName);
       setResponderName('');
       setResponderComment('');
       setAnswers({});
@@ -240,7 +274,53 @@ export default function App() {
     }
     setLoading(false);
   };
-  
+
+  // Chat
+  const sendChatMessage = async () => {
+    if (!chatInput.trim()) return;
+
+    try {
+      await api('chat', {
+        method: 'POST',
+        body: {
+          event_id: eventId,
+          user: isOrganizer ? 'Organizer' : currentUser,
+          message: chatInput,
+          isOrganizer
+        }
+      });
+
+      const chatData = await api(`chat?event_id=${eventId}`);
+      setChatMessages(chatData.messages || []);
+      setChatInput('');
+    } catch (err) {
+      setError('送信エラー: ' + err.message);
+    }
+  };
+
+  // DM
+  const sendDm = async () => {
+    if (!dmInput.trim() || !dmTarget) return;
+
+    try {
+      await api('dms', {
+        method: 'POST',
+        body: {
+          event_id: eventId,
+          from: 'Organizer',
+          to: dmTarget,
+          message: dmInput
+        }
+      });
+
+      const dmData = await api(`dms?event_id=${eventId}`);
+      setDirectMessages(dmData.messages || []);
+      setDmInput('');
+    } catch (err) {
+      setError('送信エラー: ' + err.message);
+    }
+  };
+
   // Vote counts
   const getVoteCounts = (candidateId) => {
     const counts = { available: 0, maybe: 0, unavailable: 0 };
@@ -252,7 +332,7 @@ export default function App() {
     });
     return counts;
   };
-  
+
   const getBestCandidateId = () => {
     let bestId = null;
     let maxAvailable = 0;
@@ -265,18 +345,18 @@ export default function App() {
     });
     return maxAvailable > 0 ? bestId : null;
   };
-  
+
   // Venue search
   const searchVenues = async () => {
     if (!venueArea.trim()) {
       setError('エリアを入力してください');
       return;
     }
-    
+
     setVenueSearching(true);
     setVenueResults([]);
     setSelectedVenueIndex(null);
-    
+
     try {
       const fixedCandidate = eventData.candidates.find(c => c.id === fixedCandidateId);
       const result = await api('venues', {
@@ -288,7 +368,7 @@ export default function App() {
           fixedDateTime: fixedCandidate?.datetime
         }
       });
-      
+
       setVenueResults(result.results || []);
       if (result.results?.length === 0) {
         setError('条件に合う店舗が見つかりませんでした');
@@ -298,7 +378,7 @@ export default function App() {
     }
     setVenueSearching(false);
   };
-  
+
   const selectVenue = async (venueData) => {
     try {
       await api('events', {
@@ -319,7 +399,73 @@ export default function App() {
       setError('会場設定エラー: ' + err.message);
     }
   };
-  
+
+  // Share helpers
+  const formatDatetimeForShare = (datetime) => {
+    if (!datetime) return '';
+    const date = new Date(datetime);
+    return date.toISOString().replace(/-|:|\.\d{3}/g, '');
+  };
+
+  const getShareLinks = (candidate) => {
+    const title = encodeURIComponent(eventData.title);
+    const desc = encodeURIComponent(eventData.description || '');
+    const datetime = candidate.datetime;
+    const startDate = formatDatetimeForShare(datetime);
+    const endDate = formatDatetimeForShare(new Date(new Date(datetime).getTime() + 3600000));
+    const shareText = `${eventData.title}\n日時: ${datetime}`;
+
+    return {
+      google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${desc}&dates=${startDate}/${endDate}`,
+      zoom: `https://zoom.us/schedule?topic=${title}`,
+      mail: `mailto:?subject=${title}&body=${desc}%0A%0A日時: ${encodeURIComponent(datetime)}`,
+      line: `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`,
+      slack: `https://slack.com/intl/ja-jp/`
+    };
+  };
+
+  const getFixedShareText = () => {
+    const fixed = getFixedCandidate();
+    if (!fixed) return '';
+
+    const dateStr = new Date(fixed.datetime).toLocaleString('ja-JP', {
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      weekday: 'short', hour: '2-digit', minute: '2-digit'
+    });
+
+    let text = `【確定】${eventData.title}\n日時: ${dateStr}`;
+
+    if (venue) {
+      if (venue.name) text += `\n会場: ${venue.name}`;
+      if (venue.address) text += `\n住所: ${venue.address}`;
+    }
+
+    return text;
+  };
+
+  const copyFixedInfo = () => {
+    navigator.clipboard.writeText(getFixedShareText());
+    setFixedCopied(true);
+    setTimeout(() => setFixedCopied(false), 2000);
+  };
+
+  const getFixedShareLinks = () => {
+    const fixed = getFixedCandidate();
+    if (!fixed) return {};
+
+    const title = encodeURIComponent(`【確定】${eventData.title}`);
+    const startDate = formatDatetimeForShare(fixed.datetime);
+    const endDate = formatDatetimeForShare(new Date(new Date(fixed.datetime).getTime() + 3600000));
+    const shareText = encodeURIComponent(getFixedShareText());
+
+    return {
+      google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}`,
+      mail: `mailto:?subject=${title}&body=${shareText}`,
+      line: `https://line.me/R/msg/text/?${shareText}`,
+      slack: `https://slack.com/intl/ja-jp/`
+    };
+  };
+
   // Helpers
   const formatDateTime = (dt) => {
     if (!dt) return '';
@@ -328,7 +474,7 @@ export default function App() {
       weekday: 'short', hour: '2-digit', minute: '2-digit'
     });
   };
-  
+
   const formatDateTimeShort = (dt) => {
     if (!dt) return '';
     return new Date(dt).toLocaleString('ja-JP', {
@@ -336,20 +482,26 @@ export default function App() {
       hour: '2-digit', minute: '2-digit'
     });
   };
-  
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  };
+
   const getShareUrl = () => {
     const url = new URL(window.location);
     url.searchParams.set('id', eventId);
     url.searchParams.delete('org');
     return url.toString();
   };
-  
+
   const copyUrl = () => {
     navigator.clipboard.writeText(getShareUrl());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  
+
   const getFixedCandidate = () => eventData.candidates.find(c => c.id === fixedCandidateId);
   const bestCandidateId = getBestCandidateId();
 
@@ -368,20 +520,20 @@ export default function App() {
         <div style={styles.logo}>SCHEDULE</div>
         <p style={styles.tagline}>シンプルな日程調整ツール</p>
       </header>
-      
+
       {error && (
         <div style={styles.errorBanner}>
           {error}
           <button style={styles.errorClose} onClick={() => setError(null)}>×</button>
         </div>
       )}
-      
+
       {/* Create View */}
       {view === 'create' && (
         <div style={styles.card}>
           <div style={styles.cardLabel}>NEW EVENT</div>
           <h2 style={styles.cardTitle}>イベント作成</h2>
-          
+
           <div style={styles.formGroup}>
             <label style={styles.label}>イベント名 *</label>
             <input
@@ -393,7 +545,7 @@ export default function App() {
               maxLength={255}
             />
           </div>
-          
+
           <div style={styles.formGroup}>
             <label style={styles.label}>概要</label>
             <textarea
@@ -404,7 +556,7 @@ export default function App() {
               rows={3}
             />
           </div>
-          
+
           <div style={styles.formGroup}>
             <label style={styles.label}>候補日時</label>
             <div style={styles.candidatesList}>
@@ -416,6 +568,7 @@ export default function App() {
                     style={styles.datetimeInput}
                     value={c.datetime}
                     onChange={e => updateCandidate(c.id, e.target.value)}
+                    step="600"
                   />
                   <button
                     style={{ ...styles.removeBtn, opacity: eventData.candidates.length === 1 ? 0.3 : 1 }}
@@ -432,11 +585,11 @@ export default function App() {
               <button style={styles.addBtn} onClick={addCandidate}>+ 候補を追加</button>
             )}
           </div>
-          
+
           {/* オフライン開催（会場情報） */}
           <div style={styles.venueSection}>
-            <div 
-              style={styles.venueToggle} 
+            <div
+              style={styles.venueToggle}
               onClick={() => setVenueEnabled(!venueEnabled)}
             >
               <div style={{
@@ -447,7 +600,7 @@ export default function App() {
               </div>
               <span style={styles.venueToggleLabel}>オフライン開催（会場情報を追加）</span>
             </div>
-            
+
             {venueEnabled && (
               <div style={styles.venueFields}>
                 <div style={styles.formGroup}>
@@ -503,7 +656,7 @@ export default function App() {
               </div>
             )}
           </div>
-          
+
           <button
             style={{ ...styles.btnPrimary, opacity: loading ? 0.5 : 1 }}
             onClick={publishEvent}
@@ -513,7 +666,7 @@ export default function App() {
           </button>
         </div>
       )}
-      
+
       {/* Results View */}
       {view === 'results' && (
         <div style={styles.card}>
@@ -523,7 +676,7 @@ export default function App() {
           </div>
           <h2 style={styles.cardTitle}>{eventData.title}</h2>
           {eventData.description && <p style={styles.eventDesc}>{eventData.description}</p>}
-          
+
           {/* Fixed Banner */}
           {fixedCandidateId && (
             <div style={styles.fixedBanner}>
@@ -534,9 +687,30 @@ export default function App() {
                 )}
               </div>
               <div style={styles.fixedDateTime}>{formatDateTime(getFixedCandidate()?.datetime)}</div>
+
+              {/* Fixed Schedule Share */}
+              <div style={styles.fixedShareSection}>
+                <button style={styles.fixedShareToggle} onClick={() => setShowFixedShare(!showFixedShare)}>
+                  {showFixedShare ? '共有オプションを閉じる' : '確定日程を共有'}
+                </button>
+                {showFixedShare && (
+                  <div style={styles.fixedShareOptions}>
+                    <div style={styles.fixedShareText}>
+                      <pre style={styles.fixedSharePre}>{getFixedShareText()}</pre>
+                      <button style={styles.copyBtn} onClick={copyFixedInfo}>{fixedCopied ? 'Copied!' : 'Copy'}</button>
+                    </div>
+                    <div style={styles.fixedShareLinks}>
+                      <a href={getFixedShareLinks().google} target="_blank" rel="noopener noreferrer" style={styles.fixedShareLink}>Google Calendar</a>
+                      <a href={getFixedShareLinks().mail} target="_blank" rel="noopener noreferrer" style={styles.fixedShareLink}>Mail</a>
+                      <a href={getFixedShareLinks().line} target="_blank" rel="noopener noreferrer" style={styles.fixedShareLink}>LINE</a>
+                      <a href={getFixedShareLinks().slack} target="_blank" rel="noopener noreferrer" style={styles.fixedShareLink}>Slack</a>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-          
+
           {/* Venue Finder */}
           {fixedCandidateId && !venue && isOrganizer && (
             <div style={styles.venueFinder}>
@@ -546,11 +720,11 @@ export default function App() {
                   {showVenueFinder ? '閉じる' : '会場を探す'}
                 </button>
               </div>
-              
+
               {!showVenueFinder && (
                 <p style={styles.venueHint}>日時が確定しました。会場を検索できます。</p>
               )}
-              
+
               {showVenueFinder && (
                 <div style={styles.venueForm}>
                   <div style={styles.formGroup}>
@@ -563,7 +737,7 @@ export default function App() {
                       placeholder="例：渋谷、新宿駅周辺"
                     />
                   </div>
-                  
+
                   <div style={styles.venueRow}>
                     <div style={{ ...styles.formGroup, flex: 1 }}>
                       <label style={styles.label}>ジャンル</label>
@@ -589,7 +763,7 @@ export default function App() {
                       </select>
                     </div>
                   </div>
-                  
+
                   <button
                     style={{ ...styles.btnBlue, opacity: venueSearching ? 0.5 : 1 }}
                     onClick={searchVenues}
@@ -597,8 +771,7 @@ export default function App() {
                   >
                     {venueSearching ? '検索中...' : 'おすすめを探す'}
                   </button>
-                  
-                  {/* Venue Results */}
+
                   {venueResults.length > 0 && (
                     <div style={styles.venueResults}>
                       <div style={styles.cardLabel}>SUGGESTIONS ({venueResults.length}件)</div>
@@ -617,7 +790,7 @@ export default function App() {
                             {v.rating && <span style={styles.venueRating}>★ {v.rating}</span>}
                             {v.priceLevel && <span style={styles.venuePrice}>{'¥'.repeat(v.priceLevel)}</span>}
                           </div>
-                          
+
                           {selectedVenueIndex === i && (
                             <div style={styles.venueActions}>
                               <a
@@ -639,7 +812,7 @@ export default function App() {
                           )}
                         </div>
                       ))}
-                      
+
                       <button style={styles.btnSecondary} onClick={searchVenues}>
                         別の候補を探す
                       </button>
@@ -649,15 +822,15 @@ export default function App() {
               )}
             </div>
           )}
-          
+
           {/* Venue Display */}
           {venue && (
             <div style={styles.venueDisplay}>
               <div style={styles.cardLabel}>VENUE</div>
               {venue.imageUrl && (
                 <div style={styles.venueImageWrapper}>
-                  <img 
-                    src={venue.imageUrl} 
+                  <img
+                    src={venue.imageUrl}
                     alt={venue.name}
                     style={styles.venueImage}
                     onError={(e) => e.target.style.display = 'none'}
@@ -710,7 +883,7 @@ export default function App() {
               </div>
             </div>
           )}
-          
+
           {/* Share URL */}
           <div style={styles.formGroup}>
             <label style={styles.label}>招待URL</label>
@@ -719,7 +892,7 @@ export default function App() {
               <button style={styles.copyBtn} onClick={copyUrl}>{copied ? 'Copied!' : 'Copy'}</button>
             </div>
           </div>
-          
+
           {/* Tabs */}
           <div style={styles.tabs}>
             <button
@@ -734,8 +907,49 @@ export default function App() {
             >
               回答する
             </button>
+            <button
+              style={{ ...styles.tab, ...(activeTab === 'chat' ? styles.tabActive : {}) }}
+              onClick={() => setActiveTab('chat')}
+            >
+              Chat {chatMessages.length > 0 && `(${chatMessages.length})`}
+            </button>
           </div>
-          
+
+          {/* Chat Tab */}
+          {activeTab === 'chat' && (
+            <div style={styles.chatSection}>
+              <div style={styles.chatMessages}>
+                {chatMessages.length === 0 ? (
+                  <div style={styles.chatEmpty}>メッセージはまだありません</div>
+                ) : (
+                  chatMessages.map((msg) => (
+                    <div key={msg.id} style={{ ...styles.chatMessage, ...(msg.isOrganizer ? styles.chatMessageOrganizer : {}) }}>
+                      <div style={styles.chatMessageHeader}>
+                        <span style={styles.chatUser}>
+                          {msg.user}
+                          {msg.isOrganizer && <span style={styles.organizerBadge}>HOST</span>}
+                        </span>
+                        <span style={styles.chatTime}>{formatTime(msg.createdAt)}</span>
+                      </div>
+                      <div style={styles.chatText}>{msg.message}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div style={styles.chatInputRow}>
+                <input
+                  type="text"
+                  style={styles.chatInput}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="メッセージを入力..."
+                  onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                />
+                <button style={styles.chatSendBtn} onClick={sendChatMessage}>Send</button>
+              </div>
+            </div>
+          )}
+
           {/* Status Tab */}
           {activeTab === 'status' && (
             <>
@@ -745,13 +959,14 @@ export default function App() {
                   <div style={{ textAlign: 'center' }}>○</div>
                   <div style={{ textAlign: 'center' }}>△</div>
                   <div style={{ textAlign: 'center' }}>×</div>
-                  <div style={{ textAlign: 'right' }}>{isOrganizer ? 'FIX' : ''}</div>
+                  <div style={{ textAlign: 'right' }}>{isOrganizer ? 'FIX' : '共有'}</div>
                 </div>
                 {eventData.candidates.map(c => {
                   const counts = getVoteCounts(c.id);
                   const isBest = c.id === bestCandidateId && !fixedCandidateId;
                   const isFixed = c.id === fixedCandidateId;
-                  
+                  const links = getShareLinks(c);
+
                   return (
                     <div key={c.id} style={{
                       ...styles.tableRow,
@@ -765,8 +980,8 @@ export default function App() {
                       <div style={{ ...styles.countCell, color: '#4ade80' }}>{counts.available}</div>
                       <div style={{ ...styles.countCell, color: '#fbbf24' }}>{counts.maybe}</div>
                       <div style={{ ...styles.countCell, color: '#f87171' }}>{counts.unavailable}</div>
-                      <div style={{ textAlign: 'right' }}>
-                        {isOrganizer && (
+                      <div style={{ textAlign: 'right', position: 'relative' }}>
+                        {isOrganizer ? (
                           isFixed ? (
                             <button style={styles.btnSmall} onClick={unfixCandidate}>Unfix</button>
                           ) : (
@@ -778,20 +993,41 @@ export default function App() {
                               Fix
                             </button>
                           )
+                        ) : (
+                          <button
+                            style={styles.shareBtn}
+                            onClick={() => setShowShareMenu(showShareMenu === c.id ? null : c.id)}
+                          >
+                            Share
+                          </button>
+                        )}
+                        {showShareMenu === c.id && !isOrganizer && (
+                          <div style={styles.shareMenu}>
+                            <a href={links.google} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Google Calendar</a>
+                            <a href={links.zoom} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Zoom</a>
+                            <a href={links.mail} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Mail</a>
+                            <a href={links.line} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>LINE</a>
+                            <a href={links.slack} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Slack</a>
+                          </div>
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              
+
               {/* Responses List */}
               {responses.length > 0 && (
                 <div style={styles.responsesList}>
                   <div style={styles.cardLabel}>RESPONSES ({responses.length})</div>
                   {responses.map(r => (
                     <div key={r.id} style={styles.responseCard}>
-                      <div style={styles.responseName}>{r.name}</div>
+                      <div style={styles.responseCardHeader}>
+                        <div style={styles.responseName}>{r.name}</div>
+                        {isOrganizer && (
+                          <button style={styles.dmBtn} onClick={() => { setDmTarget(r.name); setShowDmPanel(true); }}>DM</button>
+                        )}
+                      </div>
                       <div style={styles.responseAnswers}>
                         {eventData.candidates.map(c => {
                           const answer = r.answers?.[c.id];
@@ -815,13 +1051,13 @@ export default function App() {
                   ))}
                 </div>
               )}
-              
+
               {responses.length === 0 && (
                 <p style={styles.emptyText}>まだ回答がありません</p>
               )}
             </>
           )}
-          
+
           {/* Respond Tab */}
           {activeTab === 'respond' && (
             <>
@@ -836,7 +1072,7 @@ export default function App() {
                   maxLength={100}
                 />
               </div>
-              
+
               <div style={styles.answerGrid}>
                 {eventData.candidates.map(c => (
                   <div key={c.id} style={styles.answerRow}>
@@ -861,7 +1097,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              
+
               <div style={styles.formGroup}>
                 <label style={styles.label}>コメント（任意）</label>
                 <textarea
@@ -872,7 +1108,7 @@ export default function App() {
                   rows={2}
                 />
               </div>
-              
+
               <button
                 style={{ ...styles.btnPrimary, opacity: loading ? 0.5 : 1 }}
                 onClick={submitResponse}
@@ -881,6 +1117,47 @@ export default function App() {
                 {loading ? '送信中...' : '回答を送信'}
               </button>
             </>
+          )}
+
+          {/* DM Overlay */}
+          {showDmPanel && (
+            <div style={styles.dmOverlay} onClick={() => setShowDmPanel(false)}>
+              <div style={styles.dmPanel} onClick={(e) => e.stopPropagation()}>
+                <div style={styles.dmHeader}>
+                  <span style={styles.cardLabel}>DIRECT MESSAGE</span>
+                  <button style={styles.dmCloseBtn} onClick={() => setShowDmPanel(false)}>
+                    <span style={styles.removeLine1} /><span style={styles.removeLine2} />
+                  </button>
+                </div>
+                <div style={styles.dmList}>
+                  {directMessages.filter(dm => dm.to === dmTarget).map((dm) => (
+                    <div key={dm.id} style={styles.dmMessage}>
+                      <div style={styles.dmMessageHeader}>
+                        <span style={styles.dmTo}>To: {dm.to}</span>
+                        <span style={styles.chatTime}>{formatTime(dm.createdAt)}</span>
+                      </div>
+                      <div style={styles.dmText}>{dm.message}</div>
+                    </div>
+                  ))}
+                </div>
+                {dmTarget && (
+                  <div style={styles.dmInputSection}>
+                    <div style={styles.dmTargetLabel}>To: {dmTarget}</div>
+                    <div style={styles.chatInputRow}>
+                      <input
+                        type="text"
+                        style={styles.chatInput}
+                        value={dmInput}
+                        onChange={(e) => setDmInput(e.target.value)}
+                        placeholder="DMを入力..."
+                        onKeyPress={(e) => e.key === 'Enter' && sendDm()}
+                      />
+                      <button style={styles.chatSendBtn} onClick={sendDm}>Send</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -893,27 +1170,27 @@ const styles = {
   container: { maxWidth: 600, margin: '0 auto', padding: '24px 16px', minHeight: '100vh' },
   loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 40, color: 'rgba(255,255,255,0.5)' },
   spinner: { width: 20, height: 20, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' },
-  
+
   header: { textAlign: 'center', marginBottom: 32, paddingBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.1)' },
   logo: { fontSize: 11, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', marginBottom: 8 },
   tagline: { fontSize: 13, color: 'rgba(255,255,255,0.3)' },
-  
+
   errorBanner: { padding: '12px 16px', background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 13, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   errorClose: { background: 'none', border: 'none', color: '#f87171', fontSize: 18, cursor: 'pointer' },
-  
+
   card: { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: 32 },
   cardLabel: { fontSize: 10, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', marginBottom: 8 },
   cardTitle: { fontSize: 24, fontWeight: 300, marginBottom: 24, color: '#fff' },
   eventDesc: { color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 24 },
-  
+
   headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  
+
   formGroup: { marginBottom: 24 },
   label: { display: 'block', fontSize: 11, letterSpacing: 1, color: 'rgba(255,255,255,0.5)', marginBottom: 8, textTransform: 'uppercase' },
   input: { width: '100%', padding: '14px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: 16, outline: 'none' },
   textarea: { width: '100%', padding: '14px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: 16, outline: 'none', resize: 'none', fontFamily: 'inherit' },
   select: { width: '100%', padding: 14, background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 14, outline: 'none', cursor: 'pointer' },
-  
+
   candidatesList: { display: 'flex', flexDirection: 'column', gap: 2, background: 'rgba(255,255,255,0.05)', marginBottom: 8 },
   candidateRow: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#0a0a0a' },
   candidateNum: { fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', width: 24 },
@@ -922,20 +1199,27 @@ const styles = {
   removeLine1: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
   removeLine2: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(-45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
   addBtn: { padding: 14, background: 'rgba(255,255,255,0.02)', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', width: '100%' },
-  
+
   btnPrimary: { width: '100%', padding: 16, background: '#fff', border: 'none', color: '#0a0a0a', fontSize: 13, fontWeight: 500, cursor: 'pointer', letterSpacing: 1 },
   btnSecondary: { padding: '10px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: 11, cursor: 'pointer', letterSpacing: 0.5, textDecoration: 'none' },
   btnBlue: { width: '100%', padding: 14, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 13, cursor: 'pointer' },
   btnSmall: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.7)', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
   btnFix: { padding: '8px 12px', background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.4)', color: '#4ade80', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
-  
+
   badgeFixed: { display: 'inline-block', padding: '3px 8px', fontSize: 9, fontWeight: 600, letterSpacing: 1, background: '#4ade80', color: '#0a0a0a', marginRight: 8 },
   badgeBest: { display: 'inline-block', padding: '3px 8px', fontSize: 9, fontWeight: 600, letterSpacing: 1, background: '#fff', color: '#0a0a0a', marginRight: 8 },
   badgeFixedSmall: { display: 'inline-block', padding: '2px 6px', fontSize: 8, fontWeight: 600, letterSpacing: 0.5, background: '#4ade80', color: '#0a0a0a', marginRight: 8 },
-  
+
   fixedBanner: { padding: 20, background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)', marginBottom: 24 },
-  fixedDateTime: { fontSize: 20, fontWeight: 500, marginTop: 12, color: '#fff' },
-  
+  fixedDateTime: { fontSize: 20, fontWeight: 500, marginTop: 12, marginBottom: 20, color: '#fff' },
+  fixedShareSection: { borderTop: '1px solid rgba(74,222,128,0.2)', paddingTop: 16 },
+  fixedShareToggle: { padding: '10px 16px', background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontSize: 11, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase', width: '100%' },
+  fixedShareOptions: { marginTop: 16 },
+  fixedShareText: { background: 'rgba(0,0,0,0.3)', padding: 16, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start' },
+  fixedSharePre: { flex: 1, margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.8)', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.6 },
+  fixedShareLinks: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  fixedShareLink: { padding: '10px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', fontSize: 11, textDecoration: 'none', letterSpacing: 0.5, textTransform: 'uppercase' },
+
   venueFinder: { padding: 20, background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 24 },
   venueHint: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
   venueForm: { marginTop: 16 },
@@ -949,7 +1233,7 @@ const styles = {
   venueRating: { color: '#fbbf24' },
   venuePrice: { color: '#4ade80' },
   venueActions: { display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' },
-  
+
   venueDisplay: { padding: 20, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 24 },
   venueInfo: { marginTop: 16 },
   venueInfoRow: { display: 'flex', gap: 16, marginBottom: 8 },
@@ -957,8 +1241,7 @@ const styles = {
   venueImageWrapper: { marginTop: 16, marginBottom: 16, border: '1px solid rgba(255,255,255,0.1)' },
   venueImage: { width: '100%', height: 180, objectFit: 'cover', display: 'block' },
   venueButtons: { display: 'flex', gap: 8, marginTop: 16 },
-  
-  // オフライン開催（作成時）
+
   venueSection: { marginBottom: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)' },
   venueToggle: { display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', marginBottom: 16 },
   toggleBox: { width: 20, height: 20, border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
@@ -966,15 +1249,49 @@ const styles = {
   checkMark: { width: 10, height: 6, borderLeft: '2px solid #0a0a0a', borderBottom: '2px solid #0a0a0a', transform: 'rotate(-45deg) translateY(-1px)' },
   venueToggleLabel: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
   venueFields: { paddingLeft: 32 },
-  
+
   urlBox: { display: 'flex', gap: 1, background: 'rgba(255,255,255,0.1)' },
   urlInput: { flex: 1, padding: 14, background: 'rgba(255,255,255,0.03)', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: 'monospace', outline: 'none' },
   copyBtn: { padding: '14px 20px', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: 11, cursor: 'pointer', letterSpacing: 1 },
-  
+
   tabs: { display: 'flex', gap: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 24 },
   tab: { flex: 1, padding: 14, background: 'rgba(255,255,255,0.02)', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' },
   tabActive: { background: 'rgba(255,255,255,0.08)', color: '#fff' },
-  
+
+  // Chat styles
+  chatSection: { border: '1px solid rgba(255,255,255,0.08)' },
+  chatMessages: { height: 300, overflowY: 'auto', padding: 20 },
+  chatEmpty: { color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '40px 0' },
+  chatMessage: { marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.03)' },
+  chatMessageOrganizer: { borderLeft: '2px solid #fff' },
+  chatMessageHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
+  chatUser: { fontSize: 12, fontWeight: 500, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 },
+  organizerBadge: { fontSize: 9, padding: '2px 6px', background: '#fff', color: '#0a0a0a', fontWeight: 600, letterSpacing: 0.5 },
+  chatTime: { fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' },
+  chatText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 },
+  chatInputRow: { display: 'flex', gap: 1, borderTop: '1px solid rgba(255,255,255,0.08)' },
+  chatInput: { flex: 1, padding: 16, background: 'rgba(255,255,255,0.02)', border: 'none', color: '#fff', fontSize: 14, outline: 'none' },
+  chatSendBtn: { padding: '16px 24px', background: '#fff', border: 'none', color: '#0a0a0a', fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
+
+  // Share styles
+  shareBtn: { padding: '8px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
+  shareMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#141414', padding: '8px 0', minWidth: 180, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', zIndex: 100, border: '1px solid rgba(255,255,255,0.1)' },
+  shareLink: { display: 'block', padding: '12px 20px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 12, letterSpacing: 0.3 },
+
+  // DM styles
+  dmBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
+  dmOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  dmPanel: { width: '90%', maxWidth: 480, background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' },
+  dmHeader: { padding: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  dmCloseBtn: { width: 32, height: 32, border: 'none', background: 'transparent', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  dmList: { flex: 1, overflowY: 'auto', padding: 20 },
+  dmMessage: { marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderLeft: '2px solid rgba(255,255,255,0.2)' },
+  dmMessageHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
+  dmTo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5 },
+  dmText: { fontSize: 14, color: '#fff', lineHeight: 1.5 },
+  dmInputSection: { padding: 20, borderTop: '1px solid rgba(255,255,255,0.08)' },
+  dmTargetLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+
   resultsTable: { border: '1px solid rgba(255,255,255,0.08)' },
   tableHeader: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 },
   tableRow: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' },
@@ -982,10 +1299,11 @@ const styles = {
   tableRowFixed: { background: 'rgba(74,222,128,0.1)', borderLeft: '2px solid #4ade80' },
   dateCell: { fontSize: 14 },
   countCell: { textAlign: 'center', fontFamily: 'monospace', fontSize: 15 },
-  
+
   responsesList: { marginTop: 24, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)' },
   responseCard: { padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' },
-  responseName: { fontWeight: 500, marginBottom: 8 },
+  responseCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  responseName: { fontWeight: 500, marginBottom: 0 },
   responseAnswers: { display: 'flex', gap: 4 },
   answerChip: { width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.3)' },
   chipGreen: { background: 'rgba(74,222,128,0.1)', color: '#4ade80' },
@@ -993,7 +1311,7 @@ const styles = {
   chipRed: { background: 'rgba(248,113,113,0.1)', color: '#f87171' },
   responseComment: { marginTop: 8, fontSize: 13, color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' },
   emptyText: { textAlign: 'center', color: 'rgba(255,255,255,0.3)', padding: 40 },
-  
+
   answerGrid: { marginBottom: 16 },
   answerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' },
   answerBtns: { display: 'flex', gap: 8 },
