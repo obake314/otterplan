@@ -452,7 +452,7 @@ export default function App() {
                       onChange={e => updateCandidatePart(c.id, 'minute', e.target.value)}
                     >
                       <option value="" disabled>分</option>
-                      {[0, 10, 20, 30, 40, 50].map(m => (
+                      {[0, 30].map(m => (
                         <option key={m} value={String(m).padStart(2, '0')}>{String(m).padStart(2, '0')}分</option>
                       ))}
                     </select>
