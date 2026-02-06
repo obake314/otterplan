@@ -960,7 +960,7 @@ const styles = {
   datetimeInput: { flex: 1, padding: '10px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 14, outline: 'none', colorScheme: 'dark' },
   datetimeGroup: { display: 'flex', flex: 1, gap: 8, alignItems: 'center' },
   dateInput: { flex: 1, padding: '10px 0', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: 14, outline: 'none', colorScheme: 'dark' },
-  timeSelect: { padding: '10px 4px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 14, outline: 'none', cursor: 'pointer', colorScheme: 'dark' },
+  timeSelect: { padding: '10px 8px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: 14, outline: 'none', cursor: 'pointer', colorScheme: 'dark', appearance: 'auto', WebkitAppearance: 'menulist', minWidth: 70 },
   removeBtn: { width: 28, height: 28, background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative' },
   removeLine1: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
   removeLine2: { position: 'absolute', width: 14, height: 1, background: 'rgba(255,255,255,0.5)', transform: 'rotate(-45deg)', top: '50%', left: '50%', marginLeft: -7, marginTop: -0.5 },
