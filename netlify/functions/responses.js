@@ -42,10 +42,11 @@ export async function handler(event) {
 
       // 回答を追加
       const id = generateId();
+      const answersJson = JSON.stringify(answers);
       
       await sql`
         INSERT INTO responses (id, event_id, name, comment, answers, created_at)
-        VALUES (${id}, ${event_id}, ${name}, ${comment || ''}, ${JSON.stringify(answers)}, NOW())
+        VALUES (${id}, ${event_id}, ${name}, ${comment || ''}, ${answersJson}::jsonb, NOW())
       `;
 
       return {
@@ -59,10 +60,14 @@ export async function handler(event) {
 
   } catch (error) {
     console.error('Error:', error);
+    console.error('Error stack:', error.stack);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ 
+        error: error.message || 'Database error',
+        detail: String(error)
+      })
     };
   }
 }

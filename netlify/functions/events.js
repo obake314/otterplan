@@ -60,7 +60,8 @@ export async function handler(event) {
 
     // POST: イベント作成
     if (event.httpMethod === 'POST') {
-      const { title, description, candidates, venue } = JSON.parse(event.body);
+      const body = JSON.parse(event.body);
+      const { title, description, candidates, venue } = body;
 
       if (!title || !candidates || candidates.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'title and candidates required' }) };
@@ -68,10 +69,14 @@ export async function handler(event) {
 
       // ランダムID生成
       const id = generateId();
+      
+      // JSONBカラム用にシリアライズ
+      const candidatesJson = JSON.stringify(candidates);
+      const venueJson = venue ? JSON.stringify(venue) : null;
 
       await sql`
         INSERT INTO events (id, title, description, candidates, venue, created_at)
-        VALUES (${id}, ${title}, ${description || ''}, ${JSON.stringify(candidates)}, ${venue ? JSON.stringify(venue) : null}, NOW())
+        VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, NOW())
       `;
 
       return {
@@ -98,8 +103,9 @@ export async function handler(event) {
       }
 
       if (venue !== undefined) {
+        const venueJson = venue ? JSON.stringify(venue) : null;
         await sql`
-          UPDATE events SET venue = ${JSON.stringify(venue)}, updated_at = NOW()
+          UPDATE events SET venue = ${venueJson}::jsonb, updated_at = NOW()
           WHERE id = ${id}
         `;
       }
@@ -115,10 +121,14 @@ export async function handler(event) {
 
   } catch (error) {
     console.error('Error:', error);
+    console.error('Error stack:', error.stack);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({ 
+        error: error.message || 'Database error',
+        detail: String(error)
+      })
     };
   }
 }

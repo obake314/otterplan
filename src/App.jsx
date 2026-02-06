@@ -7,11 +7,12 @@ const api = async (endpoint, options = {}) => {
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || 'Request failed');
+    console.error('API Error:', data);
+    throw new Error(data.error || data.detail || `HTTP ${res.status}`);
   }
-  return res.json();
+  return data;
 };
 
 export default function App() {
