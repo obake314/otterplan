@@ -13,6 +13,13 @@ export async function handler(event) {
   }
 
   // Initialize SQL client inside handler
+  if (!process.env.DATABASE_URL) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: 'DATABASE_URL environment variable is not set' })
+    };
+  }
   const sql = neon(process.env.DATABASE_URL);
 
   try {
