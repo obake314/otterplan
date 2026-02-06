@@ -941,7 +941,7 @@ const styles = {
   errorBanner: { padding: '12px 16px', background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', fontSize: 13, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   errorClose: { background: 'none', border: 'none', color: '#f87171', fontSize: 18, cursor: 'pointer' },
   
-  card: { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', padding: 32 },
+  card: {},
   cardLabel: { fontSize: 10, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', marginBottom: 8 },
   cardTitle: { fontSize: 24, fontWeight: 300, marginBottom: 24, color: '#fff' },
   eventDesc: { color: 'rgba(255,255,255,0.5)', fontSize: 14, marginBottom: 24 },
