@@ -1,7 +1,5 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL);
-
 export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -13,6 +11,9 @@ export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
+
+  // Initialize SQL client inside handler
+  const sql = neon(process.env.DATABASE_URL);
 
   try {
     // POST: 回答追加

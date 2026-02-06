@@ -1,15 +1,5 @@
 import { neon } from '@neondatabase/serverless';
 
-let sqlClient; // ← グローバルに保持（関数のまま）
-
-function getSql() {
-  if (sql) return sql;
-	const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is missing');
-
-  sql = neon(url);
-  return sql;
-}
 export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -22,6 +12,9 @@ export async function handler(event) {
     return { statusCode: 200, headers, body: '' };
   }
 
+  // Initialize SQL client inside handler
+  const sql = neon(process.env.DATABASE_URL);
+
   try {
     // GET: イベント取得
     if (event.httpMethod === 'GET') {
@@ -31,7 +24,6 @@ export async function handler(event) {
       }
 
       // イベント取得
-	const sql = getSql();
       const events = await sql`
         SELECT * FROM events WHERE id = ${id}
       `;
