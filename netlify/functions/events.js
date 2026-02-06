@@ -1,7 +1,16 @@
 import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL);
+let sql;
 
+function getSql() {
+  if (sql) return sql;
+
+  const url = process.env.DATABASE_URL; // ←ここを実際のキー名に合わせる
+  if (!url) throw new Error('DATABASE_URL is missing');
+
+  sql = neon(url);
+  return sql;
+}
 export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
