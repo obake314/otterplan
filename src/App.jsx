@@ -535,7 +535,7 @@ export default function App() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.logo}>SCHEDULE</div>
+        <div style={styles.logo}>Otterplan</div>
         <p style={styles.tagline}>シンプルな日程調整ツール</p>
       </header>
 
