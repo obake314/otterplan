@@ -75,6 +75,10 @@ export async function handler(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'title and candidates required' }) };
       }
 
+      if (title.length > 255) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'イベント名は255文字以内で入力してください' }) };
+      }
+
       // ランダムID生成
       const id = generateId();
       

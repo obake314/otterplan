@@ -28,10 +28,18 @@ export async function handler(event) {
       const { event_id, name, comment, answers } = JSON.parse(event.body);
 
       if (!event_id || !name || !answers) {
-        return { 
-          statusCode: 400, 
-          headers, 
-          body: JSON.stringify({ error: 'event_id, name, and answers required' }) 
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'event_id, name, and answers required' })
+        };
+      }
+
+      if (name.length > 100) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: '名前は100文字以内で入力してください' })
         };
       }
 

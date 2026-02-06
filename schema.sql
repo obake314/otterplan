@@ -4,7 +4,7 @@
 -- Events table
 CREATE TABLE IF NOT EXISTS events (
   id VARCHAR(32) PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
+  title TEXT NOT NULL,
   description TEXT DEFAULT '',
   candidates JSONB NOT NULL DEFAULT '[]',
   fixed_candidate_id INTEGER DEFAULT NULL,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS responses (
   id VARCHAR(32) PRIMARY KEY,
   event_id VARCHAR(32) NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-  name VARCHAR(100) NOT NULL,
+  name TEXT NOT NULL,
   comment TEXT DEFAULT '',
   answers JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

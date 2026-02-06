@@ -123,6 +123,11 @@ export default function App() {
       setError('イベント名を入力してください');
       return;
     }
+
+    if (eventData.title.length > 255) {
+      setError('イベント名は255文字以内で入力してください');
+      return;
+    }
     
     const validCandidates = eventData.candidates.filter(c => c.datetime);
     if (validCandidates.length === 0) {
@@ -197,6 +202,11 @@ export default function App() {
   const submitResponse = async () => {
     if (!responderName.trim()) {
       setError('名前を入力してください');
+      return;
+    }
+
+    if (responderName.length > 100) {
+      setError('名前は100文字以内で入力してください');
       return;
     }
     
@@ -380,6 +390,7 @@ export default function App() {
               value={eventData.title}
               onChange={e => setEventData(prev => ({ ...prev, title: e.target.value }))}
               placeholder="例：チームミーティング"
+              maxLength={255}
             />
           </div>
           
@@ -822,6 +833,7 @@ export default function App() {
                   value={responderName}
                   onChange={e => setResponderName(e.target.value)}
                   placeholder="あなたの名前"
+                  maxLength={100}
                 />
               </div>
               
