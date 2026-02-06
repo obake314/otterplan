@@ -4,7 +4,7 @@ export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, PUT, OPTIONS',
     'Content-Type': 'application/json'
   };
 
@@ -49,17 +49,17 @@ export async function handler(event) {
       `;
 
       if (events.length === 0) {
-        return { 
-          statusCode: 404, 
-          headers, 
-          body: JSON.stringify({ error: 'Event not found' }) 
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ error: 'Event not found' })
         };
       }
 
       // 回答を追加
       const id = generateId();
       const answersJson = JSON.stringify(answers);
-      
+
       await sql`
         INSERT INTO responses (id, event_id, name, comment, answers, created_at)
         VALUES (${id}, ${event_id}, ${name}, ${comment || ''}, ${answersJson}::jsonb, NOW())
@@ -67,6 +67,53 @@ export async function handler(event) {
 
       return {
         statusCode: 201,
+        headers,
+        body: JSON.stringify({ id })
+      };
+    }
+
+    // PUT: 回答編集
+    if (event.httpMethod === 'PUT') {
+      const { id, name, comment, answers } = JSON.parse(event.body);
+
+      if (!id || !name || !answers) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: 'id, name, and answers required' })
+        };
+      }
+
+      if (name.length > 100) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: '名前は100文字以内で入力してください' })
+        };
+      }
+
+      // 回答が存在するか確認
+      const existing = await sql`
+        SELECT id FROM responses WHERE id = ${id}
+      `;
+
+      if (existing.length === 0) {
+        return {
+          statusCode: 404,
+          headers,
+          body: JSON.stringify({ error: 'Response not found' })
+        };
+      }
+
+      const answersJson = JSON.stringify(answers);
+
+      await sql`
+        UPDATE responses SET name = ${name}, comment = ${comment || ''}, answers = ${answersJson}::jsonb
+        WHERE id = ${id}
+      `;
+
+      return {
+        statusCode: 200,
         headers,
         body: JSON.stringify({ id })
       };
@@ -80,7 +127,7 @@ export async function handler(event) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: error.message || 'Database error',
         detail: String(error)
       })

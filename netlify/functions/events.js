@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import crypto from 'crypto';
 
 export async function handler(event) {
   const headers = {
@@ -26,6 +27,7 @@ export async function handler(event) {
     // GET: イベント取得
     if (event.httpMethod === 'GET') {
       const id = event.queryStringParameters?.id;
+      const organizerToken = event.queryStringParameters?.organizer_token;
       if (!id) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
       }
@@ -34,12 +36,15 @@ export async function handler(event) {
       const events = await sql`
         SELECT * FROM events WHERE id = ${id}
       `;
-      
+
       if (events.length === 0) {
         return { statusCode: 404, headers, body: JSON.stringify({ error: 'Event not found' }) };
       }
 
       const evt = events[0];
+
+      // トークン検証で主催者判定
+      const isOrganizer = !!(organizerToken && evt.organizer_token && organizerToken === evt.organizer_token);
 
       // 回答取得
       const responses = await sql`
@@ -56,6 +61,7 @@ export async function handler(event) {
           candidates: evt.candidates,
           fixed_candidate_id: evt.fixed_candidate_id,
           venue: evt.venue,
+          is_organizer: isOrganizer,
           responses: responses.map(r => ({
             id: r.id,
             name: r.name,
@@ -81,29 +87,44 @@ export async function handler(event) {
 
       // ランダムID生成
       const id = generateId();
-      
+      // 主催者トークン生成
+      const organizerToken = crypto.randomBytes(32).toString('hex');
+
       // JSONBカラム用にシリアライズ
       const candidatesJson = JSON.stringify(candidates);
       const venueJson = venue ? JSON.stringify(venue) : null;
 
       await sql`
-        INSERT INTO events (id, title, description, candidates, venue, created_at)
-        VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, NOW())
+        INSERT INTO events (id, title, description, candidates, venue, organizer_token, created_at)
+        VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, ${organizerToken}, NOW())
       `;
 
       return {
         statusCode: 201,
         headers,
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ id, organizer_token: organizerToken })
       };
     }
 
     // PATCH: イベント更新
     if (event.httpMethod === 'PATCH') {
-      const { id, fixed_candidate_id, venue } = JSON.parse(event.body);
+      const { id, fixed_candidate_id, venue, organizer_token } = JSON.parse(event.body);
 
       if (!id) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+      }
+
+      // 主催者トークン検証
+      if (organizer_token) {
+        const events = await sql`
+          SELECT organizer_token FROM events WHERE id = ${id}
+        `;
+        if (events.length === 0) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Event not found' }) };
+        }
+        if (events[0].organizer_token !== organizer_token) {
+          return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+        }
       }
 
       // 更新するフィールドを動的に構築
@@ -137,7 +158,7 @@ export async function handler(event) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: error.message || 'Database error',
         detail: String(error)
       })
