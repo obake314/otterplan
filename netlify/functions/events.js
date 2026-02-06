@@ -1,11 +1,10 @@
 import { neon } from '@neondatabase/serverless';
 
-let sql;
+let sqlClient; // ← グローバルに保持（関数のまま）
 
 function getSql() {
   if (sql) return sql;
-
-  const url = process.env.DATABASE_URL; // ←ここを実際のキー名に合わせる
+	const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is missing');
 
   sql = neon(url);
@@ -32,6 +31,7 @@ export async function handler(event) {
       }
 
       // イベント取得
+	const sql = getSql();
       const events = await sql`
         SELECT * FROM events WHERE id = ${id}
       `;
