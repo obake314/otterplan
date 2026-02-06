@@ -30,6 +30,16 @@ export default function App() {
   const [fixedCandidateId, setFixedCandidateId] = useState(null);
   const [venue, setVenue] = useState(null);
   
+  // Venue input (create mode)
+  const [venueEnabled, setVenueEnabled] = useState(false);
+  const [venueInput, setVenueInput] = useState({
+    name: '',
+    address: '',
+    website: '',
+    imageUrl: '',
+    reservationName: ''
+  });
+  
   // Responses
   const [responses, setResponses] = useState([]);
   const [responderName, setResponderName] = useState('');
@@ -121,17 +131,28 @@ export default function App() {
     
     setLoading(true);
     try {
+      // 会場情報を準備
+      const venueData = venueEnabled && venueInput.name ? {
+        name: venueInput.name,
+        address: venueInput.address,
+        website: venueInput.website,
+        imageUrl: venueInput.imageUrl,
+        reservationName: venueInput.reservationName
+      } : null;
+      
       const result = await api('events', {
         method: 'POST',
         body: {
           title: eventData.title,
           description: eventData.description,
-          candidates: validCandidates
+          candidates: validCandidates,
+          venue: venueData
         }
       });
       
       setEventId(result.id);
       setEventData(prev => ({ ...prev, candidates: validCandidates }));
+      setVenue(venueData);
       setIsOrganizer(true);
       setView('results');
       
@@ -400,6 +421,77 @@ export default function App() {
             )}
           </div>
           
+          {/* オフライン開催（会場情報） */}
+          <div style={styles.venueSection}>
+            <div 
+              style={styles.venueToggle} 
+              onClick={() => setVenueEnabled(!venueEnabled)}
+            >
+              <div style={{
+                ...styles.toggleBox,
+                ...(venueEnabled ? styles.toggleBoxActive : {})
+              }}>
+                {venueEnabled && <span style={styles.checkMark} />}
+              </div>
+              <span style={styles.venueToggleLabel}>オフライン開催（会場情報を追加）</span>
+            </div>
+            
+            {venueEnabled && (
+              <div style={styles.venueFields}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>会場名</label>
+                  <input
+                    type="text"
+                    style={styles.input}
+                    value={venueInput.name}
+                    onChange={e => setVenueInput(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="例：会議室A"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>住所</label>
+                  <input
+                    type="text"
+                    style={styles.input}
+                    value={venueInput.address}
+                    onChange={e => setVenueInput(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder="例：東京都渋谷区..."
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>会場Webサイト</label>
+                  <input
+                    type="url"
+                    style={styles.input}
+                    value={venueInput.website}
+                    onChange={e => setVenueInput(prev => ({ ...prev, website: e.target.value }))}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>会場画像URL</label>
+                  <input
+                    type="url"
+                    style={styles.input}
+                    value={venueInput.imageUrl}
+                    onChange={e => setVenueInput(prev => ({ ...prev, imageUrl: e.target.value }))}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>予約名義</label>
+                  <input
+                    type="text"
+                    style={styles.input}
+                    value={venueInput.reservationName}
+                    onChange={e => setVenueInput(prev => ({ ...prev, reservationName: e.target.value }))}
+                    placeholder="例：山田"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          
           <button
             style={{ ...styles.btnPrimary, opacity: loading ? 0.5 : 1 }}
             onClick={publishEvent}
@@ -550,6 +642,16 @@ export default function App() {
           {venue && (
             <div style={styles.venueDisplay}>
               <div style={styles.cardLabel}>VENUE</div>
+              {venue.imageUrl && (
+                <div style={styles.venueImageWrapper}>
+                  <img 
+                    src={venue.imageUrl} 
+                    alt={venue.name}
+                    style={styles.venueImage}
+                    onError={(e) => e.target.style.display = 'none'}
+                  />
+                </div>
+              )}
               <div style={styles.venueInfo}>
                 <div style={styles.venueInfoRow}>
                   <span style={styles.venueInfoLabel}>会場名</span>
@@ -561,15 +663,39 @@ export default function App() {
                     <span>{venue.address}</span>
                   </div>
                 )}
+                {venue.reservationName && (
+                  <div style={styles.venueInfoRow}>
+                    <span style={styles.venueInfoLabel}>予約名義</span>
+                    <span>{venue.reservationName}</span>
+                  </div>
+                )}
+                {venue.rating && (
+                  <div style={styles.venueInfoRow}>
+                    <span style={styles.venueInfoLabel}>評価</span>
+                    <span>★ {venue.rating}</span>
+                  </div>
+                )}
               </div>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name + ' ' + venue.address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ ...styles.btnSecondary, display: 'inline-block', marginTop: 16 }}
-              >
-                Google Maps で開く
-              </a>
+              <div style={styles.venueButtons}>
+                {venue.website && (
+                  <a
+                    href={venue.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={styles.btnSecondary}
+                  >
+                    Webサイト
+                  </a>
+                )}
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((venue.name || '') + ' ' + (venue.address || ''))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={styles.btnSecondary}
+                >
+                  Google Maps
+                </a>
+              </div>
             </div>
           )}
           
@@ -814,7 +940,19 @@ const styles = {
   venueDisplay: { padding: 20, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 24 },
   venueInfo: { marginTop: 16 },
   venueInfoRow: { display: 'flex', gap: 16, marginBottom: 8 },
-  venueInfoLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)', width: 60, textTransform: 'uppercase' },
+  venueInfoLabel: { fontSize: 11, color: 'rgba(255,255,255,0.4)', width: 70, textTransform: 'uppercase', flexShrink: 0 },
+  venueImageWrapper: { marginTop: 16, marginBottom: 16, border: '1px solid rgba(255,255,255,0.1)' },
+  venueImage: { width: '100%', height: 180, objectFit: 'cover', display: 'block' },
+  venueButtons: { display: 'flex', gap: 8, marginTop: 16 },
+  
+  // オフライン開催（作成時）
+  venueSection: { marginBottom: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)' },
+  venueToggle: { display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', marginBottom: 16 },
+  toggleBox: { width: 20, height: 20, border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  toggleBoxActive: { background: '#fff', borderColor: '#fff' },
+  checkMark: { width: 10, height: 6, borderLeft: '2px solid #0a0a0a', borderBottom: '2px solid #0a0a0a', transform: 'rotate(-45deg) translateY(-1px)' },
+  venueToggleLabel: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  venueFields: { paddingLeft: 32 },
   
   urlBox: { display: 'flex', gap: 1, background: 'rgba(255,255,255,0.1)' },
   urlInput: { flex: 1, padding: 14, background: 'rgba(255,255,255,0.03)', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: 'monospace', outline: 'none' },

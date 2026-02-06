@@ -60,7 +60,7 @@ export async function handler(event) {
 
     // POST: イベント作成
     if (event.httpMethod === 'POST') {
-      const { title, description, candidates } = JSON.parse(event.body);
+      const { title, description, candidates, venue } = JSON.parse(event.body);
 
       if (!title || !candidates || candidates.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'title and candidates required' }) };
@@ -70,8 +70,8 @@ export async function handler(event) {
       const id = generateId();
 
       await sql`
-        INSERT INTO events (id, title, description, candidates, created_at)
-        VALUES (${id}, ${title}, ${description || ''}, ${JSON.stringify(candidates)}, NOW())
+        INSERT INTO events (id, title, description, candidates, venue, created_at)
+        VALUES (${id}, ${title}, ${description || ''}, ${JSON.stringify(candidates)}, ${venue ? JSON.stringify(venue) : null}, NOW())
       `;
 
       return {
