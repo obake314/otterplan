@@ -413,6 +413,7 @@ export default function App() {
                   <span style={styles.candidateNum}>{String(i + 1).padStart(2, '0')}</span>
                   <input
                     type="datetime-local"
+                    step="600"
                     style={styles.datetimeInput}
                     value={c.datetime}
                     onChange={e => updateCandidate(c.id, e.target.value)}
