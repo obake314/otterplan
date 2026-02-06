@@ -604,19 +604,11 @@ export default function App() {
                       onChange={e => updateCandidatePart(c.id, 'minute', e.target.value)}
                     >
                       <option value="" disabled>分</option>
-                      {[0, 30].map(m => (
+                      {[0, 15, 30, 45].map(m => (
                         <option key={m} value={String(m).padStart(2, '0')}>{String(m).padStart(2, '0')}分</option>
                       ))}
                     </select>
                   </div>
-                  <input
-                    type="datetime-local"
-                    step="600"
-                    style={styles.datetimeInput}
-                    value={c.datetime}
-                    onChange={e => updateCandidate(c.id, e.target.value)}
-                    step="600"
-                  />
                   <button
                     style={{ ...styles.removeBtn, opacity: eventData.candidates.length === 1 ? 0.3 : 1 }}
                     onClick={() => removeCandidate(c.id)}
