@@ -1,156 +1,135 @@
-# Schedule Coordinator - 日程調整ツール
+# Schedule - 日程調整ツール
 
-Firebase + reCAPTCHA によるセキュアな日程調整アプリ
+Netlify + NeonDB + Google Maps API のシンプル構成
 
----
+## セットアップ（10分）
 
-## セットアップ手順
+### 1. NeonDB 作成
 
-### 1. Firebase プロジェクト作成（無料）
+1. [Neon Console](https://console.neon.tech/) にアクセス
+2. 「New Project」をクリック
+3. プロジェクト名を入力（例：schedule-app）
+4. 「Create Project」
 
-1. [Firebase Console](https://console.firebase.google.com/) にアクセス
-2. 「プロジェクトを追加」をクリック
-3. プロジェクト名を入力（例: `schedule-app`）
-4. Google Analytics はオフでOK
-5. 「プロジェクトを作成」
+5. **接続文字列をコピー**
+   - Dashboard → Connection Details
+   - 「Connection string」をコピー（`postgresql://...` で始まる）
 
-### 2. Firestore データベース作成
+6. **テーブル作成**
+   - 左メニュー「SQL Editor」
+   - `schema.sql` の内容をコピペして実行
 
-1. Firebase Console の左メニュー「Firestore Database」
-2. 「データベースを作成」
-3. 「テストモードで開始」を選択（後でルールを設定）
-4. リージョン: `asia-northeast1`（東京）を選択
-5. 「有効にする」
+### 2. Google Maps API（任意）
 
-### 3. Firebase 設定を取得
+会場検索機能を使う場合のみ必要。なくても動作します（モックデータ表示）。
 
-1. Firebase Console のプロジェクト設定（歯車アイコン）
-2. 「全般」タブの下部「マイアプリ」
-3. 「ウェブアプリを追加」（</>アイコン）
-4. アプリ名を入力、「アプリを登録」
-5. 表示される `firebaseConfig` をコピー
+1. [Google Cloud Console](https://console.cloud.google.com/)
+2. 「APIとサービス」→「ライブラリ」
+3. 「Places API (New)」を有効化
+4. 「認証情報」→「APIキーを作成」
+5. キーをコピー
 
-### 4. reCAPTCHA v3 設定（無料）
-
-1. [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin) にアクセス
-2. 「v3 Admin Console」→「+」で新規作成
-3. 設定:
-   - ラベル: `schedule-app`
-   - reCAPTCHA タイプ: **reCAPTCHA v3**
-   - ドメイン: `localhost` と本番ドメインを追加
-4. 「送信」→ **サイトキー** をコピー
-
-### 5. コードに設定を反映
-
-**`src/firebase.js`** を編集:
-```javascript
-const firebaseConfig = {
-  apiKey: "あなたのapiKey",
-  authDomain: "あなたのプロジェクト.firebaseapp.com",
-  projectId: "あなたのプロジェクト",
-  storageBucket: "あなたのプロジェクト.appspot.com",
-  messagingSenderId: "あなたのsenderId",
-  appId: "あなたのappId"
-};
-```
-
-**`src/main.jsx`** を編集:
-```javascript
-const RECAPTCHA_SITE_KEY = 'あなたのreCAPTCHAサイトキー'
-```
-
-### 6. Firestore セキュリティルール設定
-
-1. Firebase Console →「Firestore Database」→「ルール」タブ
-2. `firestore.rules` の内容をコピーペースト
-3. 「公開」
-
----
-
-## ローカル実行
+### 3. GitHub リポジトリ作成
 
 ```bash
-npm install
-npm run dev
+git init
+git add .
+git commit -m "initial commit"
+git remote add origin https://github.com/YOUR_NAME/schedule-app.git
+git push -u origin main
 ```
 
-ブラウザで http://localhost:5173 を開く
+### 4. Netlify デプロイ
+
+1. [Netlify](https://app.netlify.com/) にログイン
+2. 「Add new site」→「Import an existing project」
+3. GitHub を選択、リポジトリを選択
+
+4. **ビルド設定**（自動で入るはず）
+   - Build command: `npm run build`
+   - Publish directory: `dist`
+
+5. **環境変数を設定**（重要！）
+   - 「Site configuration」→「Environment variables」→「Add a variable」
+   
+   | Key | Value |
+   |-----|-------|
+   | `DATABASE_URL` | NeonDBの接続文字列 |
+   | `GOOGLE_MAPS_API_KEY` | Google Maps APIキー（任意） |
+
+6. 「Deploy site」
+
+### 5. 完了！
+
+デプロイ完了後、表示されるURLでアクセス可能。
 
 ---
 
-## デプロイ
+## ローカル開発
 
-### Netlify（推奨）
+```bash
+# 依存インストール
+npm install
 
-1. ビルド:
-   ```bash
-   npm run build
-   ```
+# .env.local を作成
+echo "DATABASE_URL=your_neon_connection_string" > .env.local
+echo "GOOGLE_MAPS_API_KEY=your_api_key" >> .env.local
 
-2. [Netlify](https://app.netlify.com) で「Add new site」→「Deploy manually」
+# Netlify CLI インストール
+npm install -g netlify-cli
 
-3. `dist` フォルダをドラッグ&ドロップ
-
-4. 完了！
-
-**GitHub連携の場合:**
-- Build command: `npm run build`
-- Publish directory: `dist`
-
-### GitHub Pages
-
-1. `vite.config.js` を編集:
-   ```javascript
-   export default defineConfig({
-     plugins: [react()],
-     base: '/リポジトリ名/'
-   })
-   ```
-
-2. GitHubにプッシュ
-
-3. Settings → Pages → Source: 「GitHub Actions」
+# ローカル起動（Functions含む）
+netlify dev
+```
 
 ---
 
-## 料金目安（Firebase無料枠）
+## 構成
 
-| 項目 | 無料枠 | 超過時 |
-|-----|-------|-------|
-| Firestore読み取り | 5万/日 | $0.06/10万 |
-| Firestore書き込み | 2万/日 | $0.18/10万 |
-| ストレージ | 1GB | $0.18/GB |
-
-**個人〜小規模利用なら無料枠で十分です**
-
----
-
-## セキュリティ機能
-
-- **reCAPTCHA v3**: イベント作成時にボット判定
-- **Firestoreルール**: 不正なデータ書き込みを防止
-- **自動削除**: 最終候補日の翌日にURL無効化
+```
+schedule-neon/
+├── src/
+│   ├── main.jsx
+│   └── App.jsx          # フロントエンド
+├── netlify/functions/
+│   ├── events.js        # イベントCRUD
+│   ├── responses.js     # 回答追加
+│   └── venues.js        # 会場検索
+├── schema.sql           # DBスキーマ
+├── netlify.toml         # Netlify設定
+└── package.json
+```
 
 ---
 
-## 機能一覧
+## 料金（全て無料枠で十分）
 
-- イベント作成（日時候補10個まで）
-- オフライン会場情報
-- 参加者の回答収集（可能/不可/調整中）
-- グループチャット
-- 主催者→参加者へのDM
-- 予定のFIX（確定）と共有
-- 外部サービス連携（Google Calendar, Zoom, Teams, Mail, LINE）
+| サービス | 無料枠 |
+|---------|--------|
+| Netlify | 100GB帯域/月、125k Functions実行/月 |
+| NeonDB | 0.5GB storage、無制限compute |
+| Google Maps | $200/月のクレジット |
 
 ---
 
-## オプション: より強固なセキュリティ
+## 機能
 
-本番環境では以下を推奨:
+- ✅ イベント作成（候補日時10個まで）
+- ✅ 招待URL共有
+- ✅ 回答収集（○△×）
+- ✅ 日程確定（FIX）
+- ✅ 会場検索・設定（Google Maps連携）
 
-1. **Cloud Functions でサーバーサイド reCAPTCHA 検証**
-2. **Firebase Authentication でユーザー認証**
-3. **App Check でアプリ認証**
+---
 
-これらは追加コストなしで実装可能です。必要であれば対応します。
+## トラブルシューティング
+
+### "Event not found" エラー
+→ NeonDBのテーブルが作成されているか確認
+
+### 会場検索で結果が出ない
+→ GOOGLE_MAPS_API_KEY が設定されているか確認
+→ APIキーなしでもモックデータが表示される
+
+### デプロイ後に動かない
+→ Netlifyの「Deploys」→「Trigger deploy」→「Clear cache and deploy site」
