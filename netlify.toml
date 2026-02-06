@@ -5,16 +5,15 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["@neondatabase/serverless"]
 
-# SPA用リダイレクト
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# API routes
+# API routes (must come first!)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
