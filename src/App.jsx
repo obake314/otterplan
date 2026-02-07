@@ -35,7 +35,7 @@ export default function App() {
   const [view, setView] = useState('create');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isOrganizer, setIsOrganizer] = useState(true);
+  const [isOrganizer, setIsOrganizer] = useState(false);
 
   // Event data
   const [eventId, setEventId] = useState(null);
@@ -90,7 +90,6 @@ export default function App() {
   const [showDmPanel, setShowDmPanel] = useState(false);
 
   // Share state
-  const [showShareMenu, setShowShareMenu] = useState(null);
   const [showFixedShare, setShowFixedShare] = useState(false);
   const [fixedCopied, setFixedCopied] = useState(false);
 
@@ -98,13 +97,16 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
+    const org = params.get('org');
 
     if (id) {
-      loadEvent(id);
+      // ?org=1が付いている旧URLからのアクセス時、localStorageにトークンがなければ
+      // 後方互換として主催者扱いにする（既存イベント用）
+      loadEvent(id, org === '1');
     }
   }, []);
 
-  const loadEvent = async (id) => {
+  const loadEvent = async (id, orgParam = false) => {
     setLoading(true);
     try {
       // localStorageから主催者トークンを取得してAPIに渡す
@@ -123,7 +125,8 @@ export default function App() {
       setFixedCandidateId(data.fixed_candidate_id);
       setVenue(data.venue);
       setResponses(data.responses || []);
-      const isOrg = !!data.is_organizer;
+      // トークン認証 or 旧URL ?org=1 のフォールバック
+      const isOrg = !!data.is_organizer || (orgParam && !orgToken);
       setIsOrganizer(isOrg);
       setView('results');
 
@@ -499,23 +502,6 @@ export default function App() {
     if (!datetime) return '';
     const date = new Date(datetime);
     return date.toISOString().replace(/-|:|\.\d{3}/g, '');
-  };
-
-  const getShareLinks = (candidate) => {
-    const title = encodeURIComponent(eventData.title);
-    const desc = encodeURIComponent(eventData.description || '');
-    const datetime = candidate.datetime;
-    const startDate = formatDatetimeForShare(datetime);
-    const endDate = formatDatetimeForShare(new Date(new Date(datetime).getTime() + 3600000));
-    const shareText = `${eventData.title}\n日時: ${datetime}`;
-
-    return {
-      google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${desc}&dates=${startDate}/${endDate}`,
-      zoom: `https://zoom.us/schedule?topic=${title}`,
-      mail: `mailto:?subject=${title}&body=${desc}%0A%0A日時: ${encodeURIComponent(datetime)}`,
-      line: `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`,
-      slack: `https://slack.com/intl/ja-jp/`
-    };
   };
 
   const getFixedShareText = () => {
@@ -1069,22 +1055,21 @@ export default function App() {
           {activeTab === 'status' && (
             <>
               <div style={styles.resultsTable}>
-                <div style={styles.tableHeader}>
+                <div style={isOrganizer ? styles.tableHeader : styles.tableHeaderNoAction}>
                   <div>日時</div>
                   <div style={{ textAlign: 'center' }}>○</div>
                   <div style={{ textAlign: 'center' }}>△</div>
                   <div style={{ textAlign: 'center' }}>×</div>
-                  <div style={{ textAlign: 'right' }}>{isOrganizer ? 'FIX' : '共有'}</div>
+                  {isOrganizer && <div style={{ textAlign: 'right' }}>FIX</div>}
                 </div>
                 {eventData.candidates.map(c => {
                   const counts = getVoteCounts(c.id);
                   const isBest = c.id === bestCandidateId && !fixedCandidateId;
                   const isFixed = c.id === fixedCandidateId;
-                  const links = getShareLinks(c);
 
                   return (
                     <div key={c.id} style={{
-                      ...styles.tableRow,
+                      ...(isOrganizer ? styles.tableRow : styles.tableRowNoAction),
                       ...(isFixed ? styles.tableRowFixed : isBest ? styles.tableRowBest : {})
                     }}>
                       <div style={styles.dateCell}>
@@ -1095,9 +1080,9 @@ export default function App() {
                       <div style={{ ...styles.countCell, color: '#4ade80' }}>{counts.available}</div>
                       <div style={{ ...styles.countCell, color: '#fbbf24' }}>{counts.maybe}</div>
                       <div style={{ ...styles.countCell, color: '#f87171' }}>{counts.unavailable}</div>
-                      <div style={{ textAlign: 'right', position: 'relative' }}>
-                        {isOrganizer ? (
-                          isFixed ? (
+                      {isOrganizer && (
+                        <div style={{ textAlign: 'right' }}>
+                          {isFixed ? (
                             <button style={styles.btnSmall} onClick={unfixCandidate}>Unfix</button>
                           ) : (
                             <button
@@ -1107,25 +1092,9 @@ export default function App() {
                             >
                               Fix
                             </button>
-                          )
-                        ) : (
-                          <button
-                            style={styles.shareBtn}
-                            onClick={() => setShowShareMenu(showShareMenu === c.id ? null : c.id)}
-                          >
-                            Share
-                          </button>
-                        )}
-                        {showShareMenu === c.id && !isOrganizer && (
-                          <div style={styles.shareMenu}>
-                            <a href={links.google} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Google Calendar</a>
-                            <a href={links.zoom} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Zoom</a>
-                            <a href={links.mail} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Mail</a>
-                            <a href={links.line} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>LINE</a>
-                            <a href={links.slack} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Slack</a>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1410,10 +1379,6 @@ const styles = {
   chatInput: { flex: 1, padding: 16, background: 'rgba(255,255,255,0.02)', border: 'none', color: '#fff', fontSize: 14, outline: 'none' },
   chatSendBtn: { padding: '16px 24px', background: '#fff', border: 'none', color: '#0a0a0a', fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
 
-  // Share styles
-  shareBtn: { padding: '8px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
-  shareMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#141414', padding: '8px 0', minWidth: 180, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', zIndex: 100, border: '1px solid rgba(255,255,255,0.1)' },
-  shareLink: { display: 'block', padding: '12px 20px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 12, letterSpacing: 0.3 },
 
   // DM styles
   dmBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
@@ -1431,7 +1396,9 @@ const styles = {
 
   resultsTable: { border: '1px solid rgba(255,255,255,0.08)' },
   tableHeader: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 },
+  tableHeaderNoAction: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 },
   tableRow: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' },
+  tableRowNoAction: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' },
   tableRowBest: { background: 'rgba(255,255,255,0.05)', borderLeft: '2px solid #fff' },
   tableRowFixed: { background: 'rgba(74,222,128,0.1)', borderLeft: '2px solid #4ade80' },
   dateCell: { fontSize: 14 },
