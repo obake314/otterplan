@@ -371,6 +371,26 @@ export default function App() {
     setAnswers({});
   };
 
+  // Delete event (organizer only)
+  const deleteEvent = async () => {
+    if (!window.confirm('このイベントを削除しますか？この操作は取り消せません。')) return;
+    try {
+      const orgToken = storage.getOrganizerToken(eventId);
+      await api(`events?id=${eventId}&organizer_token=${encodeURIComponent(orgToken)}`, {
+        method: 'DELETE'
+      });
+      // localStorageのクリーンアップ
+      try {
+        localStorage.removeItem(`otterplan_org_${eventId}`);
+        localStorage.removeItem(`otterplan_res_${eventId}`);
+      } catch {}
+      // トップに戻る
+      window.location.href = window.location.origin + window.location.pathname;
+    } catch (err) {
+      setError('削除エラー: ' + err.message);
+    }
+  };
+
   // Chat
   const sendChatMessage = async () => {
     if (!chatInput.trim()) return;
@@ -585,6 +605,14 @@ export default function App() {
   const getFixedCandidate = () => eventData.candidates.find(c => c.id === fixedCandidateId);
   const bestCandidateId = getBestCandidateId();
 
+  // 日付制限: 今日〜3ヶ月後
+  const today = new Date().toISOString().split('T')[0];
+  const maxDate = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d.toISOString().split('T')[0];
+  })();
+
   // Loading screen
   if (loading && view === 'create') {
     return (
@@ -648,6 +676,8 @@ export default function App() {
                       type="date"
                       style={styles.dateInput}
                       value={c.datetime ? c.datetime.split('T')[0] : ''}
+                      min={today}
+                      max={maxDate}
                       onChange={e => updateCandidatePart(c.id, 'date', e.target.value)}
                     />
                     <select
@@ -982,6 +1012,15 @@ export default function App() {
                   Google Maps
                 </a>
               </div>
+            </div>
+          )}
+
+          {/* Delete Event (organizer only) */}
+          {isOrganizer && (
+            <div style={styles.deleteSection}>
+              <button style={styles.btnDanger} onClick={deleteEvent}>
+                このイベントを削除
+              </button>
             </div>
           )}
 
@@ -1428,5 +1467,9 @@ const styles = {
   responseCardMine: { borderLeft: '2px solid #3b82f6' },
   myBadge: { display: 'inline-block', padding: '2px 6px', fontSize: 9, fontWeight: 600, letterSpacing: 0.5, background: '#3b82f6', color: '#fff', marginLeft: 8 },
   editBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(59,130,246,0.4)', color: '#3b82f6', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
-  editBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#3b82f6', fontSize: 13, marginBottom: 16 }
+  editBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#3b82f6', fontSize: 13, marginBottom: 16 },
+
+  // Delete styles
+  deleteSection: { marginBottom: 24, textAlign: 'right' },
+  btnDanger: { padding: '8px 16px', background: 'transparent', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171', fontSize: 11, cursor: 'pointer', letterSpacing: 0.5 }
 };
