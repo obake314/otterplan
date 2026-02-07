@@ -784,14 +784,8 @@ export default function App() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.headerTop}>
-          <div style={{ width: 32 }} />
-          <div style={{ textAlign: 'center', flex: 1 }}>
-            <div style={styles.logo}>日程調整ツール</div>
-            <p style={styles.tagline}>シンプルな日程調整ツール</p>
-          </div>
-          <button style={styles.helpBtn} onClick={() => setShowManual(true)}>？</button>
-        </div>
+        <div style={styles.logo}>Otterplan</div>
+        <p style={styles.tagline}>シンプルな日程調整ツール</p>
       </header>
 
       {error && (
