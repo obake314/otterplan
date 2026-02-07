@@ -15,11 +15,27 @@ const api = async (endpoint, options = {}) => {
   return data;
 };
 
+// localStorage helpers
+const storage = {
+  getOrganizerToken: (eventId) => {
+    try { return localStorage.getItem(`otterplan_org_${eventId}`); } catch { return null; }
+  },
+  setOrganizerToken: (eventId, token) => {
+    try { localStorage.setItem(`otterplan_org_${eventId}`, token); } catch {}
+  },
+  getResponseId: (eventId) => {
+    try { return localStorage.getItem(`otterplan_res_${eventId}`); } catch { return null; }
+  },
+  setResponseId: (eventId, responseId) => {
+    try { localStorage.setItem(`otterplan_res_${eventId}`, responseId); } catch {}
+  }
+};
+
 export default function App() {
   const [view, setView] = useState('create');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isOrganizer, setIsOrganizer] = useState(true);
+  const [isOrganizer, setIsOrganizer] = useState(false);
 
   // Event data
   const [eventId, setEventId] = useState(null);
@@ -46,6 +62,8 @@ export default function App() {
   const [responderName, setResponderName] = useState('');
   const [responderComment, setResponderComment] = useState('');
   const [answers, setAnswers] = useState({});
+  const [editingResponseId, setEditingResponseId] = useState(null);
+  const [myResponseId, setMyResponseId] = useState(null);
 
   // Venue search
   const [showVenueFinder, setShowVenueFinder] = useState(false);
@@ -72,7 +90,6 @@ export default function App() {
   const [showDmPanel, setShowDmPanel] = useState(false);
 
   // Share state
-  const [showShareMenu, setShowShareMenu] = useState(null);
   const [showFixedShare, setShowFixedShare] = useState(false);
   const [fixedCopied, setFixedCopied] = useState(false);
 
@@ -83,14 +100,22 @@ export default function App() {
     const org = params.get('org');
 
     if (id) {
+      // ?org=1が付いている旧URLからのアクセス時、localStorageにトークンがなければ
+      // 後方互換として主催者扱いにする（既存イベント用）
       loadEvent(id, org === '1');
     }
   }, []);
 
-  const loadEvent = async (id, isOrg) => {
+  const loadEvent = async (id, orgParam = false) => {
     setLoading(true);
     try {
-      const data = await api(`events?id=${id}`);
+      // localStorageから主催者トークンを取得してAPIに渡す
+      const orgToken = storage.getOrganizerToken(id);
+      const query = orgToken
+        ? `events?id=${id}&organizer_token=${encodeURIComponent(orgToken)}`
+        : `events?id=${id}`;
+      const data = await api(query);
+
       setEventId(id);
       setEventData({
         title: data.title,
@@ -100,8 +125,20 @@ export default function App() {
       setFixedCandidateId(data.fixed_candidate_id);
       setVenue(data.venue);
       setResponses(data.responses || []);
+      // トークン認証 or 旧URL ?org=1 のフォールバック
+      const isOrg = !!data.is_organizer || (orgParam && !orgToken);
       setIsOrganizer(isOrg);
       setView('results');
+
+      // localStorageから自分の回答IDを復元
+      const savedResponseId = storage.getResponseId(id);
+      if (savedResponseId && data.responses) {
+        const myResponse = data.responses.find(r => r.id === savedResponseId);
+        if (myResponse) {
+          setMyResponseId(savedResponseId);
+          setCurrentUser(myResponse.name);
+        }
+      }
 
       // Load chat messages
       try {
@@ -207,6 +244,11 @@ export default function App() {
         }
       });
 
+      // 主催者トークンをlocalStorageに保存
+      if (result.organizer_token) {
+        storage.setOrganizerToken(result.id, result.organizer_token);
+      }
+
       setEventId(result.id);
       setEventData(prev => ({ ...prev, candidates: validCandidates }));
       setVenue(venueData);
@@ -215,7 +257,7 @@ export default function App() {
 
       const url = new URL(window.location);
       url.searchParams.set('id', result.id);
-      url.searchParams.set('org', '1');
+      url.searchParams.delete('org');
       window.history.pushState({}, '', url);
     } catch (err) {
       setError('作成エラー: ' + err.message);
@@ -228,7 +270,7 @@ export default function App() {
     try {
       await api('events', {
         method: 'PATCH',
-        body: { id: eventId, fixed_candidate_id: candidateId }
+        body: { id: eventId, fixed_candidate_id: candidateId, organizer_token: storage.getOrganizerToken(eventId) }
       });
       setFixedCandidateId(candidateId);
       setShowFixedShare(true);
@@ -241,7 +283,7 @@ export default function App() {
     try {
       await api('events', {
         method: 'PATCH',
-        body: { id: eventId, fixed_candidate_id: null }
+        body: { id: eventId, fixed_candidate_id: null, organizer_token: storage.getOrganizerToken(eventId) }
       });
       setFixedCandidateId(null);
       setShowFixedShare(false);
@@ -250,7 +292,7 @@ export default function App() {
     }
   };
 
-  // Submit response
+  // Submit response (new or edit)
   const submitResponse = async () => {
     if (!responderName.trim()) {
       setError('名前を入力してください');
@@ -269,15 +311,34 @@ export default function App() {
 
     setLoading(true);
     try {
-      await api('responses', {
-        method: 'POST',
-        body: {
-          event_id: eventId,
-          name: responderName,
-          comment: responderComment,
-          answers
+      if (editingResponseId) {
+        // 既存回答を編集
+        await api('responses', {
+          method: 'PUT',
+          body: {
+            id: editingResponseId,
+            name: responderName,
+            comment: responderComment,
+            answers
+          }
+        });
+      } else {
+        // 新規回答
+        const result = await api('responses', {
+          method: 'POST',
+          body: {
+            event_id: eventId,
+            name: responderName,
+            comment: responderComment,
+            answers
+          }
+        });
+        // 回答IDをlocalStorageに保存
+        if (result.id) {
+          storage.setResponseId(eventId, result.id);
+          setMyResponseId(result.id);
         }
-      });
+      }
 
       const data = await api(`events?id=${eventId}`);
       setResponses(data.responses || []);
@@ -286,11 +347,28 @@ export default function App() {
       setResponderName('');
       setResponderComment('');
       setAnswers({});
+      setEditingResponseId(null);
       setActiveTab('status');
     } catch (err) {
       setError('送信エラー: ' + err.message);
     }
     setLoading(false);
+  };
+
+  // 自分の回答を編集モードにする
+  const startEditResponse = (response) => {
+    setEditingResponseId(response.id);
+    setResponderName(response.name);
+    setResponderComment(response.comment || '');
+    setAnswers(response.answers || {});
+    setActiveTab('respond');
+  };
+
+  const cancelEdit = () => {
+    setEditingResponseId(null);
+    setResponderName('');
+    setResponderComment('');
+    setAnswers({});
   };
 
   // Chat
@@ -407,7 +485,8 @@ export default function App() {
             name: venueData.name,
             address: venueData.address,
             rating: venueData.rating
-          }
+          },
+          organizer_token: storage.getOrganizerToken(eventId)
         }
       });
       setVenue(venueData);
@@ -423,23 +502,6 @@ export default function App() {
     if (!datetime) return '';
     const date = new Date(datetime);
     return date.toISOString().replace(/-|:|\.\d{3}/g, '');
-  };
-
-  const getShareLinks = (candidate) => {
-    const title = encodeURIComponent(eventData.title);
-    const desc = encodeURIComponent(eventData.description || '');
-    const datetime = candidate.datetime;
-    const startDate = formatDatetimeForShare(datetime);
-    const endDate = formatDatetimeForShare(new Date(new Date(datetime).getTime() + 3600000));
-    const shareText = `${eventData.title}\n日時: ${datetime}`;
-
-    return {
-      google: `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${desc}&dates=${startDate}/${endDate}`,
-      zoom: `https://zoom.us/schedule?topic=${title}`,
-      mail: `mailto:?subject=${title}&body=${desc}%0A%0A日時: ${encodeURIComponent(datetime)}`,
-      line: `https://line.me/R/msg/text/?${encodeURIComponent(shareText)}`,
-      slack: `https://slack.com/intl/ja-jp/`
-    };
   };
 
   const getFixedShareText = () => {
@@ -993,22 +1055,21 @@ export default function App() {
           {activeTab === 'status' && (
             <>
               <div style={styles.resultsTable}>
-                <div style={styles.tableHeader}>
+                <div style={isOrganizer ? styles.tableHeader : styles.tableHeaderNoAction}>
                   <div>日時</div>
                   <div style={{ textAlign: 'center' }}>○</div>
                   <div style={{ textAlign: 'center' }}>△</div>
                   <div style={{ textAlign: 'center' }}>×</div>
-                  <div style={{ textAlign: 'right' }}>{isOrganizer ? 'FIX' : '共有'}</div>
+                  {isOrganizer && <div style={{ textAlign: 'right' }}>FIX</div>}
                 </div>
                 {eventData.candidates.map(c => {
                   const counts = getVoteCounts(c.id);
                   const isBest = c.id === bestCandidateId && !fixedCandidateId;
                   const isFixed = c.id === fixedCandidateId;
-                  const links = getShareLinks(c);
 
                   return (
                     <div key={c.id} style={{
-                      ...styles.tableRow,
+                      ...(isOrganizer ? styles.tableRow : styles.tableRowNoAction),
                       ...(isFixed ? styles.tableRowFixed : isBest ? styles.tableRowBest : {})
                     }}>
                       <div style={styles.dateCell}>
@@ -1019,9 +1080,9 @@ export default function App() {
                       <div style={{ ...styles.countCell, color: '#4ade80' }}>{counts.available}</div>
                       <div style={{ ...styles.countCell, color: '#fbbf24' }}>{counts.maybe}</div>
                       <div style={{ ...styles.countCell, color: '#f87171' }}>{counts.unavailable}</div>
-                      <div style={{ textAlign: 'right', position: 'relative' }}>
-                        {isOrganizer ? (
-                          isFixed ? (
+                      {isOrganizer && (
+                        <div style={{ textAlign: 'right' }}>
+                          {isFixed ? (
                             <button style={styles.btnSmall} onClick={unfixCandidate}>Unfix</button>
                           ) : (
                             <button
@@ -1031,25 +1092,9 @@ export default function App() {
                             >
                               Fix
                             </button>
-                          )
-                        ) : (
-                          <button
-                            style={styles.shareBtn}
-                            onClick={() => setShowShareMenu(showShareMenu === c.id ? null : c.id)}
-                          >
-                            Share
-                          </button>
-                        )}
-                        {showShareMenu === c.id && !isOrganizer && (
-                          <div style={styles.shareMenu}>
-                            <a href={links.google} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Google Calendar</a>
-                            <a href={links.zoom} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Zoom</a>
-                            <a href={links.mail} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Mail</a>
-                            <a href={links.line} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>LINE</a>
-                            <a href={links.slack} target="_blank" rel="noopener noreferrer" style={styles.shareLink}>Slack</a>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1060,12 +1105,23 @@ export default function App() {
                 <div style={styles.responsesList}>
                   <div style={styles.cardLabel}>RESPONSES ({responses.length})</div>
                   {responses.map(r => (
-                    <div key={r.id} style={styles.responseCard}>
+                    <div key={r.id} style={{
+                      ...styles.responseCard,
+                      ...(r.id === myResponseId ? styles.responseCardMine : {})
+                    }}>
                       <div style={styles.responseCardHeader}>
-                        <div style={styles.responseName}>{r.name}</div>
-                        {isOrganizer && (
-                          <button style={styles.dmBtn} onClick={() => { setDmTarget(r.name); setShowDmPanel(true); }}>DM</button>
-                        )}
+                        <div style={styles.responseName}>
+                          {r.name}
+                          {r.id === myResponseId && <span style={styles.myBadge}>あなた</span>}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {r.id === myResponseId && (
+                            <button style={styles.editBtn} onClick={() => startEditResponse(r)}>編集</button>
+                          )}
+                          {isOrganizer && (
+                            <button style={styles.dmBtn} onClick={() => { setDmTarget(r.name); setShowDmPanel(true); }}>DM</button>
+                          )}
+                        </div>
                       </div>
                       <div style={styles.responseAnswers}>
                         {eventData.candidates.map(c => {
@@ -1100,6 +1156,12 @@ export default function App() {
           {/* Respond Tab */}
           {activeTab === 'respond' && (
             <>
+              {editingResponseId && (
+                <div style={styles.editBanner}>
+                  <span>回答を編集中</span>
+                  <button style={styles.btnSmall} onClick={cancelEdit}>キャンセル</button>
+                </div>
+              )}
               <div style={styles.formGroup}>
                 <label style={styles.label}>お名前 *</label>
                 <input
@@ -1153,7 +1215,7 @@ export default function App() {
                 onClick={submitResponse}
                 disabled={loading}
               >
-                {loading ? '送信中...' : '回答を送信'}
+                {loading ? '送信中...' : editingResponseId ? '回答を更新' : '回答を送信'}
               </button>
             </>
           )}
@@ -1317,10 +1379,6 @@ const styles = {
   chatInput: { flex: 1, padding: 16, background: 'rgba(255,255,255,0.02)', border: 'none', color: '#fff', fontSize: 14, outline: 'none' },
   chatSendBtn: { padding: '16px 24px', background: '#fff', border: 'none', color: '#0a0a0a', fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
 
-  // Share styles
-  shareBtn: { padding: '8px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
-  shareMenu: { position: 'absolute', top: '100%', right: 0, marginTop: 8, background: '#141414', padding: '8px 0', minWidth: 180, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', zIndex: 100, border: '1px solid rgba(255,255,255,0.1)' },
-  shareLink: { display: 'block', padding: '12px 20px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 12, letterSpacing: 0.3 },
 
   // DM styles
   dmBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase' },
@@ -1338,7 +1396,9 @@ const styles = {
 
   resultsTable: { border: '1px solid rgba(255,255,255,0.08)' },
   tableHeader: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 },
+  tableHeaderNoAction: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 },
   tableRow: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 70px', padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' },
+  tableRowNoAction: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' },
   tableRowBest: { background: 'rgba(255,255,255,0.05)', borderLeft: '2px solid #fff' },
   tableRowFixed: { background: 'rgba(74,222,128,0.1)', borderLeft: '2px solid #4ade80' },
   dateCell: { fontSize: 14 },
@@ -1362,5 +1422,11 @@ const styles = {
   answerBtn: { width: 44, height: 44, border: '1px solid rgba(255,255,255,0.15)', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 16, cursor: 'pointer' },
   answerBtnGreen: { background: 'rgba(74,222,128,0.15)', borderColor: '#4ade80', color: '#4ade80' },
   answerBtnYellow: { background: 'rgba(251,191,36,0.15)', borderColor: '#fbbf24', color: '#fbbf24' },
-  answerBtnRed: { background: 'rgba(248,113,113,0.15)', borderColor: '#f87171', color: '#f87171' }
+  answerBtnRed: { background: 'rgba(248,113,113,0.15)', borderColor: '#f87171', color: '#f87171' },
+
+  // Edit response styles
+  responseCardMine: { borderLeft: '2px solid #3b82f6' },
+  myBadge: { display: 'inline-block', padding: '2px 6px', fontSize: 9, fontWeight: 600, letterSpacing: 0.5, background: '#3b82f6', color: '#fff', marginLeft: 8 },
+  editBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(59,130,246,0.4)', color: '#3b82f6', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
+  editBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#3b82f6', fontSize: 13, marginBottom: 16 }
 };

@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS events (
   candidates JSONB NOT NULL DEFAULT '[]',
   fixed_candidate_id INTEGER DEFAULT NULL,
   venue JSONB DEFAULT NULL,
+  organizer_token VARCHAR(64) DEFAULT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
