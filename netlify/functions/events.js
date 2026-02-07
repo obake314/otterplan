@@ -39,10 +39,29 @@ export async function handler(event) {
       await sql`ALTER TABLE events ADD COLUMN organizer_token VARCHAR(64) DEFAULT NULL`;
       hasTokenColumn = true;
     } catch (e) {
-      // IF NOT EXISTS非対応の場合、既に存在するエラーも含めてリトライ
-      // 既に存在する場合はcolumn already existsエラーなので hasTokenColumn = true
       if (String(e).includes('already exists')) {
         hasTokenColumn = true;
+      }
+    }
+  }
+
+  // organizer_passwordカラムの有無を確認・追加
+  let hasPasswordColumn = false;
+  try {
+    const cols = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'events' AND column_name = 'organizer_password'
+    `;
+    hasPasswordColumn = cols.length > 0;
+  } catch (e) {}
+
+  if (!hasPasswordColumn) {
+    try {
+      await sql`ALTER TABLE events ADD COLUMN organizer_password VARCHAR(64) DEFAULT NULL`;
+      hasPasswordColumn = true;
+    } catch (e) {
+      if (String(e).includes('already exists')) {
+        hasPasswordColumn = true;
       }
     }
   }
@@ -109,10 +128,38 @@ export async function handler(event) {
       };
     }
 
-    // POST: イベント作成
+    // POST: イベント作成 or 主催者ログイン
     if (event.httpMethod === 'POST') {
       const body = JSON.parse(event.body);
-      const { title, description, candidates, venue } = body;
+
+      // 主催者パスワードログイン
+      if (body.action === 'login') {
+        const { id, password } = body;
+        if (!id || !password) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'id and password required' }) };
+        }
+
+        const events = await sql`SELECT organizer_token, organizer_password FROM events WHERE id = ${id}`;
+        if (events.length === 0) {
+          return { statusCode: 404, headers, body: JSON.stringify({ error: 'Event not found' }) };
+        }
+
+        const evt = events[0];
+        const hashedInput = crypto.createHash('sha256').update(password).digest('hex');
+
+        if (!evt.organizer_password || evt.organizer_password !== hashedInput) {
+          return { statusCode: 403, headers, body: JSON.stringify({ error: 'パスワードが正しくありません' }) };
+        }
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ organizer_token: evt.organizer_token })
+        };
+      }
+
+      // イベント作成
+      const { title, description, candidates, venue, password } = body;
 
       if (!title || !candidates || candidates.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'title and candidates required' }) };
@@ -126,8 +173,14 @@ export async function handler(event) {
       const organizerToken = crypto.randomBytes(32).toString('hex');
       const candidatesJson = JSON.stringify(candidates);
       const venueJson = venue ? JSON.stringify(venue) : null;
+      const hashedPassword = password ? crypto.createHash('sha256').update(password).digest('hex') : null;
 
-      if (hasTokenColumn) {
+      if (hasTokenColumn && hasPasswordColumn) {
+        await sql`
+          INSERT INTO events (id, title, description, candidates, venue, organizer_token, organizer_password, created_at)
+          VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, ${organizerToken}, ${hashedPassword}, NOW())
+        `;
+      } else if (hasTokenColumn) {
         await sql`
           INSERT INTO events (id, title, description, candidates, venue, organizer_token, created_at)
           VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, ${organizerToken}, NOW())

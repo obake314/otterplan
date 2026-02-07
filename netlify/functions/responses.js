@@ -45,7 +45,7 @@ export async function handler(event) {
 
       // イベントが存在するか確認
       const events = await sql`
-        SELECT id FROM events WHERE id = ${event_id}
+        SELECT id, fixed_candidate_id FROM events WHERE id = ${event_id}
       `;
 
       if (events.length === 0) {
@@ -53,6 +53,15 @@ export async function handler(event) {
           statusCode: 404,
           headers,
           body: JSON.stringify({ error: 'Event not found' })
+        };
+      }
+
+      // 日時確定済みの場合、新規回答を拒否
+      if (events[0].fixed_candidate_id) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: '日時が確定済みのため、新規回答は受け付けていません' })
         };
       }
 
