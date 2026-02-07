@@ -1,11 +1,20 @@
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
 
+// 自動マイグレーション: 必要なカラムを追加
+async function ensureSchema(sql) {
+  try {
+    await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS organizer_token VARCHAR(64) DEFAULT NULL`;
+  } catch (e) {
+    // カラムが既に存在する場合は無視
+  }
+}
+
 export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Content-Type': 'application/json'
   };
 
@@ -23,6 +32,9 @@ export async function handler(event) {
   }
   const sql = neon(process.env.DATABASE_URL);
 
+  // スキーマ自動マイグレーション
+  await ensureSchema(sql);
+
   try {
     // GET: イベント取得
     if (event.httpMethod === 'GET') {
@@ -31,6 +43,17 @@ export async function handler(event) {
       if (!id) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
       }
+
+      // 期限切れイベントのクリーンアップ（候補日の最終日時から48時間後）
+      await sql`
+        DELETE FROM events WHERE id IN (
+          SELECT e.id FROM events e
+          WHERE (
+            SELECT MAX(c->>'datetime')
+            FROM jsonb_array_elements(e.candidates) AS c
+          ) < (NOW() - INTERVAL '48 hours')::text
+        )
+      `;
 
       // イベント取得
       const events = await sql`
@@ -106,7 +129,7 @@ export async function handler(event) {
       };
     }
 
-    // PATCH: イベント更新
+    // PATCH: イベント更新（主催者トークン検証）
     if (event.httpMethod === 'PATCH') {
       const { id, fixed_candidate_id, venue, organizer_token } = JSON.parse(event.body);
 
@@ -122,7 +145,7 @@ export async function handler(event) {
         if (events.length === 0) {
           return { statusCode: 404, headers, body: JSON.stringify({ error: 'Event not found' }) };
         }
-        if (events[0].organizer_token !== organizer_token) {
+        if (events[0].organizer_token && events[0].organizer_token !== organizer_token) {
           return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
         }
       }
@@ -142,6 +165,36 @@ export async function handler(event) {
           WHERE id = ${id}
         `;
       }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true })
+      };
+    }
+
+    // DELETE: イベント削除（主催者のみ）
+    if (event.httpMethod === 'DELETE') {
+      const id = event.queryStringParameters?.id;
+      const organizerToken = event.queryStringParameters?.organizer_token;
+
+      if (!id) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
+      }
+
+      // イベント取得・トークン検証
+      const events = await sql`
+        SELECT organizer_token FROM events WHERE id = ${id}
+      `;
+      if (events.length === 0) {
+        return { statusCode: 404, headers, body: JSON.stringify({ error: 'Event not found' }) };
+      }
+      if (!organizerToken || events[0].organizer_token !== organizerToken) {
+        return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+
+      // CASCADE で responses, chat_messages, direct_messages も削除される
+      await sql`DELETE FROM events WHERE id = ${id}`;
 
       return {
         statusCode: 200,
