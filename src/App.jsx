@@ -1282,14 +1282,16 @@ export default function App() {
                     Webサイト
                   </a>
                 )}
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((venue.name || '') + ' ' + (venue.address || ''))}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={styles.btnSecondary}
-                >
-                  地図で見る
-                </a>
+                {venue.address && (
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((venue.name || '') + ' ' + venue.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={styles.btnSecondary}
+                  >
+                    地図で見る
+                  </a>
+                )}
               </div>
             </div>
           )}
@@ -1813,7 +1815,7 @@ const styles = {
   answerBtnRed: { background: 'rgba(248,113,113,0.15)', borderColor: '#f87171', color: '#f87171' },
 
   // Edit response styles
-  responseCardMine: { borderLeft: '2px solid #3b82f6' },
+  responseCardMine: {},
   myBadge: { display: 'inline-block', padding: '2px 6px', fontSize: 9, fontWeight: 600, letterSpacing: 0.5, background: '#3b82f6', color: '#fff', marginLeft: 8 },
   editBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(59,130,246,0.4)', color: '#3b82f6', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
   editBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#3b82f6', fontSize: 13, marginBottom: 16 },
