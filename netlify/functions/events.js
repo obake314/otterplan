@@ -201,7 +201,7 @@ export async function handler(event) {
 
     // PATCH: イベント更新
     if (event.httpMethod === 'PATCH') {
-      const { id, fixed_candidate_id, venue, organizer_token } = JSON.parse(event.body);
+      const { id, fixed_candidate_id, venue, organizer_token, title, description, candidates } = JSON.parse(event.body);
 
       if (!id) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
@@ -218,6 +218,25 @@ export async function handler(event) {
         if (events[0].organizer_token && events[0].organizer_token !== organizer_token) {
           return { statusCode: 403, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
         }
+      }
+
+      if (title !== undefined) {
+        if (!title || title.length > 255) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: 'イベント名は1〜255文字で入力してください' }) };
+        }
+        await sql`UPDATE events SET title = ${title}, updated_at = NOW() WHERE id = ${id}`;
+      }
+
+      if (description !== undefined) {
+        await sql`UPDATE events SET description = ${description}, updated_at = NOW() WHERE id = ${id}`;
+      }
+
+      if (candidates !== undefined) {
+        if (!candidates || candidates.length === 0) {
+          return { statusCode: 400, headers, body: JSON.stringify({ error: '候補日時が必要です' }) };
+        }
+        const candidatesJson = JSON.stringify(candidates);
+        await sql`UPDATE events SET candidates = ${candidatesJson}::jsonb, updated_at = NOW() WHERE id = ${id}`;
       }
 
       if (fixed_candidate_id !== undefined) {
