@@ -53,7 +53,7 @@ const SvgCross = ({ size = 16, color = 'currentColor' }) => (
 export default function App() {
   const [view, setView] = useState('create');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // { message, context }
   const [isOrganizer, setIsOrganizer] = useState(false);
 
   // Event data
@@ -204,7 +204,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      setError('イベントが見つかりません: ' + err.message);
+      setError({ message: 'イベントが見つかりません: ' + err.message, context: 'load' });
     }
     setLoading(false);
   };
@@ -212,7 +212,7 @@ export default function App() {
   // Organizer password login
   const organizerLogin = async () => {
     if (!orgLoginPassword.trim()) {
-      setError('パスワードを入力してください');
+      setError({ message: 'パスワードを入力してください', context: 'login' });
       return;
     }
     setOrgLoginLoading(true);
@@ -237,7 +237,7 @@ export default function App() {
         } catch (e) {}
       }
     } catch (err) {
-      setError(err.message);
+      setError({ message: err.message, context: 'login' });
     }
     setOrgLoginLoading(false);
   };
@@ -288,23 +288,23 @@ export default function App() {
   // Publish event
   const publishEvent = async () => {
     if (!eventData.title.trim()) {
-      setError('イベント名を入力してください');
+      setError({ message: 'イベント名を入力してください', context: 'create' });
       return;
     }
 
     if (eventData.title.length > 255) {
-      setError('イベント名は255文字以内で入力してください');
+      setError({ message: 'イベント名は255文字以内で入力してください', context: 'create' });
       return;
     }
 
     const validCandidates = eventData.candidates.filter(c => c.datetime);
     if (validCandidates.length < 2) {
-      setError('候補日時を2つ以上入力してください');
+      setError({ message: '候補日時を2つ以上入力してください', context: 'create' });
       return;
     }
 
     if (!eventPassword.trim()) {
-      setError('主催者パスワードを入力してください');
+      setError({ message: '主催者パスワードを入力してください', context: 'create' });
       return;
     }
 
@@ -346,7 +346,7 @@ export default function App() {
       url.searchParams.delete('org');
       window.history.pushState({}, '', url);
     } catch (err) {
-      setError('作成エラー: ' + err.message);
+      setError({ message: '作成エラー: ' + err.message, context: 'create' });
     }
     setLoading(false);
   };
@@ -361,7 +361,7 @@ export default function App() {
       setFixedCandidateId(candidateId);
       setShowFixedShare(true);
     } catch (err) {
-      setError('更新エラー: ' + err.message);
+      setError({ message: '更新エラー: ' + err.message, context: 'status' });
     }
   };
 
@@ -374,24 +374,24 @@ export default function App() {
       setFixedCandidateId(null);
       setShowFixedShare(false);
     } catch (err) {
-      setError('更新エラー: ' + err.message);
+      setError({ message: '更新エラー: ' + err.message, context: 'status' });
     }
   };
 
   // Submit response (new or edit)
   const submitResponse = async () => {
     if (!responderName.trim()) {
-      setError('名前を入力してください');
+      setError({ message: '名前を入力してください', context: 'respond' });
       return;
     }
 
     if (responderName.length > 100) {
-      setError('名前は100文字以内で入力してください');
+      setError({ message: '名前は100文字以内で入力してください', context: 'respond' });
       return;
     }
 
     if (Object.keys(answers).length === 0) {
-      setError('1つ以上の日程に回答してください');
+      setError({ message: '1つ以上の日程に回答してください', context: 'respond' });
       return;
     }
 
@@ -433,7 +433,7 @@ export default function App() {
       setEditingResponseId(null);
       setActiveTab('status');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'respond' });
     }
     setLoading(false);
   };
@@ -505,12 +505,12 @@ export default function App() {
 
   const saveEditEvent = async () => {
     if (!editEventData.title.trim()) {
-      setError('イベント名を入力してください');
+      setError({ message: 'イベント名を入力してください', context: 'edit' });
       return;
     }
     const validCandidates = editEventData.candidates.filter(c => c.datetime);
     if (validCandidates.length < 2) {
-      setError('候補日時を2つ以上入力してください');
+      setError({ message: '候補日時を2つ以上入力してください', context: 'edit' });
       return;
     }
     setLoading(true);
@@ -533,7 +533,7 @@ export default function App() {
       setEditingEvent(false);
       setEditEventData(null);
     } catch (err) {
-      setError('更新エラー: ' + err.message);
+      setError({ message: '更新エラー: ' + err.message, context: 'edit' });
     }
     setLoading(false);
   };
@@ -552,7 +552,7 @@ export default function App() {
       } catch {}
       window.location.href = window.location.origin + window.location.pathname;
     } catch (err) {
-      setError('削除エラー: ' + err.message);
+      setError({ message: '削除エラー: ' + err.message, context: 'status' });
     }
   };
 
@@ -575,7 +575,7 @@ export default function App() {
       setChatMessages(chatData.messages || []);
       setChatInput('');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'chat' });
     }
   };
 
@@ -598,7 +598,7 @@ export default function App() {
       setDirectMessages(dmData.messages || []);
       setDmInput('');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'dm' });
     }
   };
 
@@ -630,7 +630,7 @@ export default function App() {
   // Venue search
   const searchVenues = async () => {
     if (!venueArea.trim()) {
-      setError('エリアを入力してください');
+      setError({ message: 'エリアを入力してください', context: 'venue' });
       return;
     }
 
@@ -652,10 +652,10 @@ export default function App() {
 
       setVenueResults(result.results || []);
       if (result.results?.length === 0) {
-        setError('条件に合う店舗が見つかりませんでした');
+        setError({ message: '条件に合う店舗が見つかりませんでした', context: 'venue' });
       }
     } catch (err) {
-      setError('検索エラー: ' + err.message);
+      setError({ message: '検索エラー: ' + err.message, context: 'venue' });
     }
     setVenueSearching(false);
   };
@@ -678,7 +678,7 @@ export default function App() {
       setShowVenueFinder(false);
       setVenueResults([]);
     } catch (err) {
-      setError('会場設定エラー: ' + err.message);
+      setError({ message: '会場設定エラー: ' + err.message, context: 'venue' });
     }
   };
 
@@ -769,6 +769,17 @@ export default function App() {
 
   const getFixedCandidate = () => eventData.candidates.find(c => c.id === fixedCandidateId);
   const bestCandidateId = getBestCandidateId();
+
+  // Inline error display helper
+  const ErrorInline = ({ context }) => {
+    if (!error || error.context !== context) return null;
+    return (
+      <div style={styles.errorBanner}>
+        {error.message}
+        <button style={styles.errorClose} onClick={() => setError(null)}>×</button>
+      </div>
+    );
+  };
 
   // Whether new responses are allowed (blocked when date is fixed)
   const canSubmitNewResponse = !fixedCandidateId;
@@ -893,13 +904,6 @@ export default function App() {
         </div>
       </header>
 
-      {error && (
-        <div style={styles.errorBanner}>
-          {error}
-          <button style={styles.errorClose} onClick={() => setError(null)}>×</button>
-        </div>
-      )}
-
       {/* Manual Modal */}
       {showManual && (
         <div style={styles.modalOverlay} onClick={() => setShowManual(false)}>
@@ -962,6 +966,7 @@ export default function App() {
       {view === 'create' && (
         <div style={styles.card}>
           <p style={styles.createHeading}>イベントを作成してください</p>
+          <ErrorInline context="create" />
 
           <div style={styles.formGroup}>
             <label style={styles.label}>イベント名 *</label>
@@ -1184,6 +1189,7 @@ export default function App() {
       {/* Results View */}
       {view === 'results' && (
         <div style={styles.card}>
+          <ErrorInline context="load" />
           <div style={styles.headerRow}>
             <div style={styles.cardLabel}>イベント</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1205,6 +1211,7 @@ export default function App() {
                 <span>イベントを編集中</span>
                 <button style={styles.btnSmall} onClick={cancelEditEvent}>キャンセル</button>
               </div>
+              <ErrorInline context="edit" />
               <div style={styles.formGroup}>
                 <label style={styles.label}>イベント名 *</label>
                 <input
@@ -1297,6 +1304,7 @@ export default function App() {
                   <button style={styles.modalCloseBtn} onClick={() => setShowOrgLogin(false)}>×</button>
                 </div>
                 <div style={styles.modalBody}>
+                  <ErrorInline context="login" />
                   <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
                     イベント作成時に設定したパスワードを入力してください
                   </p>
@@ -1360,6 +1368,7 @@ export default function App() {
           {/* Venue Finder */}
           {fixedCandidateId && !venue && isOrganizer && (
             <div style={styles.venueFinder}>
+              <ErrorInline context="venue" />
               <div style={styles.headerRow}>
                 <div style={styles.cardLabel}>会場検索</div>
                 <button style={styles.btnSmall} onClick={() => setShowVenueFinder(!showVenueFinder)}>
@@ -1589,6 +1598,7 @@ export default function App() {
           {/* Chat Tab */}
           {activeTab === 'chat' && (
             <div style={styles.chatSection}>
+              <ErrorInline context="chat" />
               <div style={styles.chatMessages}>
                 {chatMessages.length === 0 ? (
                   <div style={styles.chatEmpty}>メッセージはまだありません</div>
@@ -1656,6 +1666,7 @@ export default function App() {
           {/* Status Tab */}
           {activeTab === 'status' && (
             <>
+              <ErrorInline context="status" />
               {/* Accordion wrapper when fixed */}
               {fixedCandidateId && (
                 <button
@@ -1773,6 +1784,7 @@ export default function App() {
           {/* Respond Tab */}
           {activeTab === 'respond' && (
             <>
+              <ErrorInline context="respond" />
               {/* 確定済みで新規回答不可の場合のメッセージ */}
               {fixedCandidateId && !editingResponseId && !myResponseId && (
                 <div style={styles.fixedNoticeBanner}>
@@ -1868,6 +1880,7 @@ export default function App() {
                   <span style={{ fontSize: 14, fontWeight: 500 }}>ダイレクトメッセージ</span>
                   <button style={styles.modalCloseBtn} onClick={() => setShowDmPanel(false)}>×</button>
                 </div>
+                <ErrorInline context="dm" />
                 <div style={styles.dmList}>
                   {directMessages.filter(dm => dm.to === dmTarget).map((dm) => (
                     <div key={dm.id} style={styles.dmMessage}>
