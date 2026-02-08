@@ -71,6 +71,11 @@ export default function App() {
   // Password for event creation
   const [eventPassword, setEventPassword] = useState('');
 
+  // Notification settings
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [notificationThreshold, setNotificationThreshold] = useState('');
+
   // Organizer login
   const [showOrgLogin, setShowOrgLogin] = useState(false);
   const [orgLoginPassword, setOrgLoginPassword] = useState('');
@@ -320,7 +325,9 @@ export default function App() {
           description: eventData.description,
           candidates: validCandidates,
           venue: venueData,
-          password: eventPassword || undefined
+          password: eventPassword || undefined,
+          notification_email: notificationEnabled && notificationEmail ? notificationEmail : undefined,
+          notification_threshold: notificationEnabled && notificationThreshold ? parseInt(notificationThreshold, 10) : undefined
         }
       });
 
@@ -1044,6 +1051,53 @@ export default function App() {
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
               別のブラウザからでも主催者としてログインできます
             </p>
+          </div>
+
+          {/* 回答数通知 */}
+          <div style={styles.venueSection}>
+            <div
+              style={styles.venueToggle}
+              onClick={() => setNotificationEnabled(!notificationEnabled)}
+            >
+              <div style={{
+                ...styles.toggleBox,
+                ...(notificationEnabled ? styles.toggleBoxActive : {})
+              }}>
+                {notificationEnabled && <span style={styles.checkMark} />}
+              </div>
+              <span style={styles.venueToggleLabel}>回答数通知（メールで通知）</span>
+            </div>
+
+            {notificationEnabled && (
+              <div style={styles.venueFields}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>通知先メールアドレス</label>
+                  <input
+                    type="email"
+                    style={styles.input}
+                    value={notificationEmail}
+                    onChange={e => setNotificationEmail(e.target.value)}
+                    placeholder="example@mail.com"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>通知する回答数</label>
+                  <select
+                    style={styles.select}
+                    value={notificationThreshold}
+                    onChange={e => setNotificationThreshold(e.target.value)}
+                  >
+                    <option value="">選択してください</option>
+                    {[3, 5, 10, 15, 20, 30].map(n => (
+                      <option key={n} value={n}>{n}件</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                    回答数が指定件数に達したらメールで通知します
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* オフライン開催（会場情報） */}

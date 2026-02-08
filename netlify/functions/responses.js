@@ -74,6 +74,35 @@ export async function handler(event) {
         VALUES (${id}, ${event_id}, ${name}, ${comment || ''}, ${answersJson}::jsonb, NOW())
       `;
 
+      // 回答数通知チェック
+      try {
+        const evtFull = await sql`
+          SELECT title, notification_email, notification_threshold, notification_sent
+          FROM events WHERE id = ${event_id}
+        `;
+        const evt = evtFull[0];
+        if (evt && evt.notification_email && evt.notification_threshold && !evt.notification_sent) {
+          const countResult = await sql`
+            SELECT COUNT(*)::int AS cnt FROM responses WHERE event_id = ${event_id}
+          `;
+          const responseCount = countResult[0].cnt;
+          if (responseCount >= evt.notification_threshold) {
+            // 通知済みフラグを立てる
+            await sql`UPDATE events SET notification_sent = TRUE WHERE id = ${event_id}`;
+            // メール送信
+            await sendNotificationEmail(
+              evt.notification_email,
+              evt.title,
+              responseCount,
+              evt.notification_threshold,
+              event_id
+            );
+          }
+        }
+      } catch (e) {
+        console.error('Notification check error:', e);
+      }
+
       return {
         statusCode: 201,
         headers,
@@ -146,4 +175,44 @@ export async function handler(event) {
 
 function generateId() {
   return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+}
+
+async function sendNotificationEmail(to, eventTitle, responseCount, threshold, eventId) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.log('RESEND_API_KEY not set, skipping email notification');
+    return;
+  }
+
+  const fromAddress = process.env.NOTIFICATION_FROM || 'Otterplan <onboarding@resend.dev>';
+  const siteUrl = process.env.URL || 'https://otterplan.netlify.app';
+  const eventUrl = `${siteUrl}?id=${eventId}`;
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2 style="color: #333;">回答が ${threshold}件 に達しました</h2>
+      <p>イベント「<strong>${eventTitle}</strong>」の回答数が <strong>${responseCount}件</strong> になりました。</p>
+      <p><a href="${eventUrl}" style="display: inline-block; padding: 10px 20px; background: #3b82f6; color: #fff; text-decoration: none; border-radius: 4px;">イベントを確認する</a></p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="color: #999; font-size: 12px;">この通知は Otterplan から自動送信されました。</p>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [to],
+        subject: `【Otterplan】「${eventTitle}」の回答が${threshold}件に達しました`,
+        html
+      })
+    });
+    if (!res.ok) {
+      console.error('Resend API error:', await res.text());
+    }
+  } catch (e) {
+    console.error('Email send error:', e);
+  }
 }

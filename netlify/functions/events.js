@@ -66,6 +66,29 @@ export async function handler(event) {
     }
   }
 
+  // notification_emailカラムの有無を確認・追加
+  let hasNotificationColumns = false;
+  try {
+    const cols = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'events' AND column_name = 'notification_email'
+    `;
+    hasNotificationColumns = cols.length > 0;
+  } catch (e) {}
+
+  if (!hasNotificationColumns) {
+    try {
+      await sql`ALTER TABLE events ADD COLUMN notification_email TEXT DEFAULT NULL`;
+      await sql`ALTER TABLE events ADD COLUMN notification_threshold INTEGER DEFAULT NULL`;
+      await sql`ALTER TABLE events ADD COLUMN notification_sent BOOLEAN DEFAULT FALSE`;
+      hasNotificationColumns = true;
+    } catch (e) {
+      if (String(e).includes('already exists')) {
+        hasNotificationColumns = true;
+      }
+    }
+  }
+
   try {
     // GET: イベント取得
     if (event.httpMethod === 'GET') {
@@ -159,7 +182,7 @@ export async function handler(event) {
       }
 
       // イベント作成
-      const { title, description, candidates, venue, password } = body;
+      const { title, description, candidates, venue, password, notification_email, notification_threshold } = body;
 
       if (!title || !candidates || candidates.length === 0) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'title and candidates required' }) };
@@ -174,8 +197,15 @@ export async function handler(event) {
       const candidatesJson = JSON.stringify(candidates);
       const venueJson = venue ? JSON.stringify(venue) : null;
       const hashedPassword = password ? crypto.createHash('sha256').update(password).digest('hex') : null;
+      const notifEmail = notification_email || null;
+      const notifThreshold = notification_threshold ? parseInt(notification_threshold, 10) : null;
 
-      if (hasTokenColumn && hasPasswordColumn) {
+      if (hasTokenColumn && hasPasswordColumn && hasNotificationColumns) {
+        await sql`
+          INSERT INTO events (id, title, description, candidates, venue, organizer_token, organizer_password, notification_email, notification_threshold, created_at)
+          VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, ${organizerToken}, ${hashedPassword}, ${notifEmail}, ${notifThreshold}, NOW())
+        `;
+      } else if (hasTokenColumn && hasPasswordColumn) {
         await sql`
           INSERT INTO events (id, title, description, candidates, venue, organizer_token, organizer_password, created_at)
           VALUES (${id}, ${title}, ${description || ''}, ${candidatesJson}::jsonb, ${venueJson}::jsonb, ${organizerToken}, ${hashedPassword}, NOW())
