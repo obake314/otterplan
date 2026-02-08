@@ -53,21 +53,28 @@ const SvgCross = ({ size = 16, color = 'currentColor' }) => (
 export default function App() {
   const [view, setView] = useState('create');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // { message, context }
   const [isOrganizer, setIsOrganizer] = useState(false);
 
   // Event data
   const [eventId, setEventId] = useState(null);
+  const [editingEvent, setEditingEvent] = useState(false);
+  const [editEventData, setEditEventData] = useState(null);
   const [eventData, setEventData] = useState({
     title: '',
     description: '',
-    candidates: [{ id: 1, datetime: '' }]
+    candidates: [{ id: 1, datetime: '' }, { id: 2, datetime: '' }]
   });
   const [fixedCandidateId, setFixedCandidateId] = useState(null);
   const [venue, setVenue] = useState(null);
 
   // Password for event creation
   const [eventPassword, setEventPassword] = useState('');
+
+  // Notification settings
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('');
+  const [notificationThreshold, setNotificationThreshold] = useState('');
 
   // Organizer login
   const [showOrgLogin, setShowOrgLogin] = useState(false);
@@ -197,7 +204,7 @@ export default function App() {
         }
       }
     } catch (err) {
-      setError('イベントが見つかりません: ' + err.message);
+      setError({ message: 'イベントが見つかりません: ' + err.message, context: 'load' });
     }
     setLoading(false);
   };
@@ -205,7 +212,7 @@ export default function App() {
   // Organizer password login
   const organizerLogin = async () => {
     if (!orgLoginPassword.trim()) {
-      setError('パスワードを入力してください');
+      setError({ message: 'パスワードを入力してください', context: 'login' });
       return;
     }
     setOrgLoginLoading(true);
@@ -230,7 +237,7 @@ export default function App() {
         } catch (e) {}
       }
     } catch (err) {
-      setError(err.message);
+      setError({ message: err.message, context: 'login' });
     }
     setOrgLoginLoading(false);
   };
@@ -246,7 +253,7 @@ export default function App() {
   };
 
   const removeCandidate = (id) => {
-    if (eventData.candidates.length <= 1) return;
+    if (eventData.candidates.length <= 2) return;
     setEventData(prev => ({
       ...prev,
       candidates: prev.candidates.filter(c => c.id !== id)
@@ -281,18 +288,23 @@ export default function App() {
   // Publish event
   const publishEvent = async () => {
     if (!eventData.title.trim()) {
-      setError('イベント名を入力してください');
+      setError({ message: 'イベント名を入力してください', context: 'create' });
       return;
     }
 
     if (eventData.title.length > 255) {
-      setError('イベント名は255文字以内で入力してください');
+      setError({ message: 'イベント名は255文字以内で入力してください', context: 'create' });
       return;
     }
 
     const validCandidates = eventData.candidates.filter(c => c.datetime);
-    if (validCandidates.length === 0) {
-      setError('候補日時を1つ以上入力してください');
+    if (validCandidates.length < 2) {
+      setError({ message: '候補日時を2つ以上入力してください', context: 'create' });
+      return;
+    }
+
+    if (!eventPassword.trim()) {
+      setError({ message: '主催者パスワードを入力してください', context: 'create' });
       return;
     }
 
@@ -313,7 +325,9 @@ export default function App() {
           description: eventData.description,
           candidates: validCandidates,
           venue: venueData,
-          password: eventPassword || undefined
+          password: eventPassword || undefined,
+          notification_email: notificationEnabled && notificationEmail ? notificationEmail : undefined,
+          notification_threshold: notificationEnabled && notificationThreshold ? parseInt(notificationThreshold, 10) : undefined
         }
       });
 
@@ -332,7 +346,7 @@ export default function App() {
       url.searchParams.delete('org');
       window.history.pushState({}, '', url);
     } catch (err) {
-      setError('作成エラー: ' + err.message);
+      setError({ message: '作成エラー: ' + err.message, context: 'create' });
     }
     setLoading(false);
   };
@@ -347,7 +361,7 @@ export default function App() {
       setFixedCandidateId(candidateId);
       setShowFixedShare(true);
     } catch (err) {
-      setError('更新エラー: ' + err.message);
+      setError({ message: '更新エラー: ' + err.message, context: 'status' });
     }
   };
 
@@ -360,24 +374,24 @@ export default function App() {
       setFixedCandidateId(null);
       setShowFixedShare(false);
     } catch (err) {
-      setError('更新エラー: ' + err.message);
+      setError({ message: '更新エラー: ' + err.message, context: 'status' });
     }
   };
 
   // Submit response (new or edit)
   const submitResponse = async () => {
     if (!responderName.trim()) {
-      setError('名前を入力してください');
+      setError({ message: '名前を入力してください', context: 'respond' });
       return;
     }
 
     if (responderName.length > 100) {
-      setError('名前は100文字以内で入力してください');
+      setError({ message: '名前は100文字以内で入力してください', context: 'respond' });
       return;
     }
 
     if (Object.keys(answers).length === 0) {
-      setError('1つ以上の日程に回答してください');
+      setError({ message: '1つ以上の日程に回答してください', context: 'respond' });
       return;
     }
 
@@ -419,7 +433,7 @@ export default function App() {
       setEditingResponseId(null);
       setActiveTab('status');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'respond' });
     }
     setLoading(false);
   };
@@ -439,6 +453,91 @@ export default function App() {
     setAnswers({});
   };
 
+  // Edit event (organizer only)
+  const startEditEvent = () => {
+    setEditEventData({
+      title: eventData.title,
+      description: eventData.description,
+      candidates: eventData.candidates.map(c => ({ ...c }))
+    });
+    setEditingEvent(true);
+  };
+
+  const cancelEditEvent = () => {
+    setEditingEvent(false);
+    setEditEventData(null);
+  };
+
+  const addEditCandidate = () => {
+    if (editEventData.candidates.length >= 10) return;
+    const newId = Math.max(...editEventData.candidates.map(c => c.id)) + 1;
+    setEditEventData(prev => ({
+      ...prev,
+      candidates: [...prev.candidates, { id: newId, datetime: '' }]
+    }));
+  };
+
+  const removeEditCandidate = (id) => {
+    if (editEventData.candidates.length <= 2) return;
+    setEditEventData(prev => ({
+      ...prev,
+      candidates: prev.candidates.filter(c => c.id !== id)
+    }));
+  };
+
+  const updateEditCandidatePart = (id, part, partValue) => {
+    setEditEventData(prev => ({
+      ...prev,
+      candidates: prev.candidates.map(c => {
+        if (c.id !== id) return c;
+        const current = c.datetime || '';
+        const [datePart, timePart] = current ? current.split('T') : ['', ''];
+        const [hour, minute] = timePart ? timePart.split(':') : ['', ''];
+        let newDate = datePart, newHour = hour || '12', newMinute = minute || '00';
+        if (part === 'date') newDate = partValue;
+        if (part === 'hour') newHour = partValue;
+        if (part === 'minute') newMinute = partValue;
+        if (!newDate) return c;
+        return { ...c, datetime: `${newDate}T${newHour.padStart(2, '0')}:${newMinute.padStart(2, '0')}` };
+      })
+    }));
+  };
+
+  const saveEditEvent = async () => {
+    if (!editEventData.title.trim()) {
+      setError({ message: 'イベント名を入力してください', context: 'edit' });
+      return;
+    }
+    const validCandidates = editEventData.candidates.filter(c => c.datetime);
+    if (validCandidates.length < 2) {
+      setError({ message: '候補日時を2つ以上入力してください', context: 'edit' });
+      return;
+    }
+    setLoading(true);
+    try {
+      await api('events', {
+        method: 'PATCH',
+        body: {
+          id: eventId,
+          title: editEventData.title,
+          description: editEventData.description,
+          candidates: validCandidates,
+          organizer_token: storage.getOrganizerToken(eventId)
+        }
+      });
+      setEventData({
+        title: editEventData.title,
+        description: editEventData.description,
+        candidates: validCandidates
+      });
+      setEditingEvent(false);
+      setEditEventData(null);
+    } catch (err) {
+      setError({ message: '更新エラー: ' + err.message, context: 'edit' });
+    }
+    setLoading(false);
+  };
+
   // Delete event (organizer only)
   const deleteEvent = async () => {
     if (!window.confirm('このイベントを削除しますか？この操作は取り消せません。')) return;
@@ -453,7 +552,7 @@ export default function App() {
       } catch {}
       window.location.href = window.location.origin + window.location.pathname;
     } catch (err) {
-      setError('削除エラー: ' + err.message);
+      setError({ message: '削除エラー: ' + err.message, context: 'status' });
     }
   };
 
@@ -476,7 +575,7 @@ export default function App() {
       setChatMessages(chatData.messages || []);
       setChatInput('');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'chat' });
     }
   };
 
@@ -499,7 +598,7 @@ export default function App() {
       setDirectMessages(dmData.messages || []);
       setDmInput('');
     } catch (err) {
-      setError('送信エラー: ' + err.message);
+      setError({ message: '送信エラー: ' + err.message, context: 'dm' });
     }
   };
 
@@ -531,7 +630,7 @@ export default function App() {
   // Venue search
   const searchVenues = async () => {
     if (!venueArea.trim()) {
-      setError('エリアを入力してください');
+      setError({ message: 'エリアを入力してください', context: 'venue' });
       return;
     }
 
@@ -553,10 +652,10 @@ export default function App() {
 
       setVenueResults(result.results || []);
       if (result.results?.length === 0) {
-        setError('条件に合う店舗が見つかりませんでした');
+        setError({ message: '条件に合う店舗が見つかりませんでした', context: 'venue' });
       }
     } catch (err) {
-      setError('検索エラー: ' + err.message);
+      setError({ message: '検索エラー: ' + err.message, context: 'venue' });
     }
     setVenueSearching(false);
   };
@@ -579,7 +678,7 @@ export default function App() {
       setShowVenueFinder(false);
       setVenueResults([]);
     } catch (err) {
-      setError('会場設定エラー: ' + err.message);
+      setError({ message: '会場設定エラー: ' + err.message, context: 'venue' });
     }
   };
 
@@ -670,6 +769,17 @@ export default function App() {
 
   const getFixedCandidate = () => eventData.candidates.find(c => c.id === fixedCandidateId);
   const bestCandidateId = getBestCandidateId();
+
+  // Inline error display helper
+  const ErrorInline = ({ context }) => {
+    if (!error || error.context !== context) return null;
+    return (
+      <div style={styles.errorBanner}>
+        {error.message}
+        <button style={styles.errorClose} onClick={() => setError(null)}>×</button>
+      </div>
+    );
+  };
 
   // Whether new responses are allowed (blocked when date is fixed)
   const canSubmitNewResponse = !fixedCandidateId;
@@ -788,13 +898,6 @@ export default function App() {
         <p style={styles.tagline}>シンプルな日程調整ツール</p>
       </header>
 
-      {error && (
-        <div style={styles.errorBanner}>
-          {error}
-          <button style={styles.errorClose} onClick={() => setError(null)}>×</button>
-        </div>
-      )}
-
       {/* Manual Modal */}
       {showManual && (
         <div style={styles.modalOverlay} onClick={() => setShowManual(false)}>
@@ -857,6 +960,7 @@ export default function App() {
       {view === 'create' && (
         <div style={styles.card}>
           <p style={styles.createHeading}>イベントを作成してください</p>
+          <ErrorInline context="create" />
 
           <div style={styles.formGroup}>
             <label style={styles.label}>イベント名 *</label>
@@ -918,9 +1022,9 @@ export default function App() {
                     </select>
                   </div>
                   <button
-                    style={{ ...styles.removeBtn, opacity: eventData.candidates.length === 1 ? 0.3 : 1 }}
+                    style={{ ...styles.removeBtn, opacity: eventData.candidates.length <= 2 ? 0.3 : 1 }}
                     onClick={() => removeCandidate(c.id)}
-                    disabled={eventData.candidates.length === 1}
+                    disabled={eventData.candidates.length <= 2}
                   >
                     <span style={styles.removeLine1} />
                     <span style={styles.removeLine2} />
@@ -935,17 +1039,64 @@ export default function App() {
 
           {/* 主催者パスワード */}
           <div style={styles.formGroup}>
-            <label style={styles.label}>主催者パスワード（任意）</label>
+            <label style={styles.label}>主催者パスワード *</label>
             <input
               type="password"
               style={styles.input}
               value={eventPassword}
               onChange={e => setEventPassword(e.target.value)}
-              placeholder="別ブラウザからの主催者ログイン用"
+              placeholder="主催者ログイン用パスワード"
             />
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
-              設定すると別のブラウザからでも主催者としてログインできます
+              別のブラウザからでも主催者としてログインできます
             </p>
+          </div>
+
+          {/* 回答数通知 */}
+          <div style={styles.venueSection}>
+            <div
+              style={styles.venueToggle}
+              onClick={() => setNotificationEnabled(!notificationEnabled)}
+            >
+              <div style={{
+                ...styles.toggleBox,
+                ...(notificationEnabled ? styles.toggleBoxActive : {})
+              }}>
+                {notificationEnabled && <span style={styles.checkMark} />}
+              </div>
+              <span style={styles.venueToggleLabel}>回答数通知（メールで通知）</span>
+            </div>
+
+            {notificationEnabled && (
+              <div style={styles.venueFields}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>通知先メールアドレス</label>
+                  <input
+                    type="email"
+                    style={styles.input}
+                    value={notificationEmail}
+                    onChange={e => setNotificationEmail(e.target.value)}
+                    placeholder="example@mail.com"
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>通知する回答数</label>
+                  <select
+                    style={styles.select}
+                    value={notificationThreshold}
+                    onChange={e => setNotificationThreshold(e.target.value)}
+                  >
+                    <option value="">選択してください</option>
+                    {[3, 5, 10, 15, 20, 30].map(n => (
+                      <option key={n} value={n}>{n}件</option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                    回答数が指定件数に達したらメールで通知します
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* オフライン開催（会場情報） */}
@@ -1032,10 +1183,14 @@ export default function App() {
       {/* Results View */}
       {view === 'results' && (
         <div style={styles.card}>
+          <ErrorInline context="load" />
           <div style={styles.headerRow}>
             <div style={styles.cardLabel}>イベント</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {fixedCandidateId && <span style={styles.badgeFixed}>確定</span>}
+              {isOrganizer && !editingEvent && (
+                <button style={styles.editBtn} onClick={startEditEvent}>編集</button>
+              )}
               {!isOrganizer && (
                 <button style={styles.orgLoginBtn} onClick={() => setShowOrgLogin(true)}>
                   主催者ログイン
@@ -1043,8 +1198,96 @@ export default function App() {
               )}
             </div>
           </div>
-          <h2 style={styles.cardTitle}>{eventData.title}</h2>
-          {eventData.description && <p style={styles.eventDesc}>{eventData.description}</p>}
+
+          {editingEvent && editEventData ? (
+            <div style={{ marginBottom: 24 }}>
+              <div style={styles.editBanner}>
+                <span>イベントを編集中</span>
+                <button style={styles.btnSmall} onClick={cancelEditEvent}>キャンセル</button>
+              </div>
+              <ErrorInline context="edit" />
+              <div style={styles.formGroup}>
+                <label style={styles.label}>イベント名 *</label>
+                <input
+                  type="text"
+                  style={styles.input}
+                  value={editEventData.title}
+                  onChange={e => setEditEventData(prev => ({ ...prev, title: e.target.value }))}
+                  maxLength={255}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>概要</label>
+                <textarea
+                  style={styles.textarea}
+                  value={editEventData.description}
+                  onChange={e => setEditEventData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>候補日時</label>
+                <div style={styles.candidatesList}>
+                  {editEventData.candidates.map((c, i) => (
+                    <div key={c.id} style={styles.candidateRow}>
+                      <span style={styles.candidateNum}>{String(i + 1).padStart(2, '0')}</span>
+                      <div style={styles.datetimeGroup}>
+                        <input
+                          type="date"
+                          style={styles.dateInput}
+                          value={c.datetime ? c.datetime.split('T')[0] : ''}
+                          onChange={e => updateEditCandidatePart(c.id, 'date', e.target.value)}
+                        />
+                        <select
+                          style={styles.timeSelect}
+                          value={c.datetime ? c.datetime.split('T')[1]?.split(':')[0] || '' : ''}
+                          onChange={e => updateEditCandidatePart(c.id, 'hour', e.target.value)}
+                        >
+                          <option value="" disabled>時</option>
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <option key={i} value={String(i).padStart(2, '0')}>{i}時</option>
+                          ))}
+                        </select>
+                        <select
+                          style={styles.timeSelect}
+                          value={c.datetime ? c.datetime.split('T')[1]?.split(':')[1] || '' : ''}
+                          onChange={e => updateEditCandidatePart(c.id, 'minute', e.target.value)}
+                        >
+                          <option value="" disabled>分</option>
+                          {[0, 15, 30, 45].map(m => (
+                            <option key={m} value={String(m).padStart(2, '0')}>{String(m).padStart(2, '0')}分</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        style={{ ...styles.removeBtn, opacity: editEventData.candidates.length <= 2 ? 0.3 : 1 }}
+                        onClick={() => removeEditCandidate(c.id)}
+                        disabled={editEventData.candidates.length <= 2}
+                      >
+                        <span style={styles.removeLine1} />
+                        <span style={styles.removeLine2} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {editEventData.candidates.length < 10 && (
+                  <button style={styles.addBtn} onClick={addEditCandidate}>+ 候補を追加</button>
+                )}
+              </div>
+              <button
+                style={{ ...styles.btnPrimary, opacity: loading ? 0.5 : 1 }}
+                onClick={saveEditEvent}
+                disabled={loading}
+              >
+                {loading ? '保存中...' : '変更を保存'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2 style={styles.cardTitle}>{eventData.title}</h2>
+              {eventData.description && <p style={styles.eventDesc}>{eventData.description}</p>}
+            </>
+          )}
 
           {/* Organizer Login Modal */}
           {showOrgLogin && (
@@ -1055,6 +1298,7 @@ export default function App() {
                   <button style={styles.modalCloseBtn} onClick={() => setShowOrgLogin(false)}>×</button>
                 </div>
                 <div style={styles.modalBody}>
+                  <ErrorInline context="login" />
                   <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 16 }}>
                     イベント作成時に設定したパスワードを入力してください
                   </p>
@@ -1118,6 +1362,7 @@ export default function App() {
           {/* Venue Finder */}
           {fixedCandidateId && !venue && isOrganizer && (
             <div style={styles.venueFinder}>
+              <ErrorInline context="venue" />
               <div style={styles.headerRow}>
                 <div style={styles.cardLabel}>会場検索</div>
                 <button style={styles.btnSmall} onClick={() => setShowVenueFinder(!showVenueFinder)}>
@@ -1347,6 +1592,7 @@ export default function App() {
           {/* Chat Tab */}
           {activeTab === 'chat' && (
             <div style={styles.chatSection}>
+              <ErrorInline context="chat" />
               <div style={styles.chatMessages}>
                 {chatMessages.length === 0 ? (
                   <div style={styles.chatEmpty}>メッセージはまだありません</div>
@@ -1365,23 +1611,56 @@ export default function App() {
                   ))
                 )}
               </div>
-              <div style={styles.chatInputRow}>
-                <input
-                  type="text"
-                  style={styles.chatInput}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="メッセージを入力..."
-                  onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                />
-                <button style={styles.chatSendBtn} onClick={sendChatMessage}>送信</button>
-              </div>
+              {!isOrganizer && !currentUser && (
+                <div style={{ marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    style={styles.chatInput}
+                    value={chatInput}
+                    onChange={() => {}}
+                    placeholder="チャットするには名前を入力してください"
+                    readOnly
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      type="text"
+                      style={{ ...styles.chatInput, flex: 1 }}
+                      value={responderName}
+                      onChange={(e) => setResponderName(e.target.value)}
+                      placeholder="あなたの名前"
+                      maxLength={100}
+                    />
+                    <button
+                      style={styles.chatSendBtn}
+                      onClick={() => {
+                        if (responderName.trim()) setCurrentUser(responderName.trim());
+                      }}
+                    >
+                      設定
+                    </button>
+                  </div>
+                </div>
+              )}
+              {(isOrganizer || currentUser) && (
+                <div style={styles.chatInputRow}>
+                  <input
+                    type="text"
+                    style={styles.chatInput}
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="メッセージを入力..."
+                    onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                  />
+                  <button style={styles.chatSendBtn} onClick={sendChatMessage}>送信</button>
+                </div>
+              )}
             </div>
           )}
 
           {/* Status Tab */}
           {activeTab === 'status' && (
             <>
+              <ErrorInline context="status" />
               {/* Accordion wrapper when fixed */}
               {fixedCandidateId && (
                 <button
@@ -1499,6 +1778,7 @@ export default function App() {
           {/* Respond Tab */}
           {activeTab === 'respond' && (
             <>
+              <ErrorInline context="respond" />
               {/* 確定済みで新規回答不可の場合のメッセージ */}
               {fixedCandidateId && !editingResponseId && !myResponseId && (
                 <div style={styles.fixedNoticeBanner}>
@@ -1594,6 +1874,7 @@ export default function App() {
                   <span style={{ fontSize: 14, fontWeight: 500 }}>ダイレクトメッセージ</span>
                   <button style={styles.modalCloseBtn} onClick={() => setShowDmPanel(false)}>×</button>
                 </div>
+                <ErrorInline context="dm" />
                 <div style={styles.dmList}>
                   {directMessages.filter(dm => dm.to === dmTarget).map((dm) => (
                     <div key={dm.id} style={styles.dmMessage}>

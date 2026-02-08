@@ -21,6 +21,23 @@ export async function handler(event) {
   }
   const sql = neon(process.env.DATABASE_URL);
 
+  // テーブル自動作成
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS direct_messages (
+        id VARCHAR(32) PRIMARY KEY,
+        event_id VARCHAR(32) NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        from_name TEXT NOT NULL,
+        to_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_direct_messages_event_id ON direct_messages(event_id)`;
+  } catch (e) {
+    // テーブルが既に存在する場合は無視
+  }
+
   try {
     // GET: DM取得
     if (event.httpMethod === 'GET') {
