@@ -118,17 +118,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('status');
   const [copied, setCopied] = useState(false);
 
-  // Chat state
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
-  const [currentUser, setCurrentUser] = useState('');
-
-  // DM state
-  const [dmTarget, setDmTarget] = useState(null);
-  const [dmInput, setDmInput] = useState('');
-  const [directMessages, setDirectMessages] = useState([]);
-  const [showDmPanel, setShowDmPanel] = useState(false);
-
   // Share state
   const [showFixedShare, setShowFixedShare] = useState(false);
   const [fixedCopied, setFixedCopied] = useState(false);
@@ -184,23 +173,6 @@ export default function App() {
         const myResponse = data.responses.find(r => r.id === savedResponseId);
         if (myResponse) {
           setMyResponseId(savedResponseId);
-          setCurrentUser(myResponse.name);
-        }
-      }
-
-      try {
-        const chatData = await api(`chat?event_id=${id}`);
-        setChatMessages(chatData.messages || []);
-      } catch (e) {
-        console.error('Chat load error:', e);
-      }
-
-      if (isOrg) {
-        try {
-          const dmData = await api(`dms?event_id=${id}`);
-          setDirectMessages(dmData.messages || []);
-        } catch (e) {
-          console.error('DM load error:', e);
         }
       }
     } catch (err) {
@@ -230,11 +202,6 @@ export default function App() {
         setIsOrganizer(true);
         setShowOrgLogin(false);
         setOrgLoginPassword('');
-        // DM読み込み
-        try {
-          const dmData = await api(`dms?event_id=${eventId}`);
-          setDirectMessages(dmData.messages || []);
-        } catch (e) {}
       }
     } catch (err) {
       setError({ message: err.message, context: 'login' });
@@ -426,7 +393,6 @@ export default function App() {
       const data = await api(`events?id=${eventId}`);
       setResponses(data.responses || []);
 
-      setCurrentUser(responderName);
       setResponderName('');
       setResponderComment('');
       setAnswers({});
@@ -556,52 +522,6 @@ export default function App() {
     }
   };
 
-  // Chat
-  const sendChatMessage = async () => {
-    if (!chatInput.trim()) return;
-
-    try {
-      await api('chat', {
-        method: 'POST',
-        body: {
-          event_id: eventId,
-          user: isOrganizer ? '主催者' : currentUser,
-          message: chatInput,
-          isOrganizer
-        }
-      });
-
-      const chatData = await api(`chat?event_id=${eventId}`);
-      setChatMessages(chatData.messages || []);
-      setChatInput('');
-    } catch (err) {
-      setError({ message: '送信エラー: ' + err.message, context: 'chat' });
-    }
-  };
-
-  // DM
-  const sendDm = async () => {
-    if (!dmInput.trim() || !dmTarget) return;
-
-    try {
-      await api('dms', {
-        method: 'POST',
-        body: {
-          event_id: eventId,
-          from: '主催者',
-          to: dmTarget,
-          message: dmInput
-        }
-      });
-
-      const dmData = await api(`dms?event_id=${eventId}`);
-      setDirectMessages(dmData.messages || []);
-      setDmInput('');
-    } catch (err) {
-      setError({ message: '送信エラー: ' + err.message, context: 'dm' });
-    }
-  };
-
   // Vote counts
   const getVoteCounts = (candidateId) => {
     const counts = { available: 0, maybe: 0, unavailable: 0 };
@@ -705,6 +625,8 @@ export default function App() {
       if (venue.address) text += `\n住所: ${venue.address}`;
     }
 
+    text += `\n${getShareUrl()}`;
+
     return text;
   };
 
@@ -748,12 +670,6 @@ export default function App() {
     });
   };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-  };
-
   const getShareUrl = () => {
     const url = new URL(window.location);
     url.searchParams.set('id', eventId);
@@ -781,8 +697,9 @@ export default function App() {
     );
   };
 
-  // Whether new responses are allowed (blocked when date is fixed)
-  const canSubmitNewResponse = !fixedCandidateId;
+  // Whether new responses are allowed (blocked when date is fixed or max respondents reached)
+  const maxRespondents = 10;
+  const canSubmitNewResponse = !fixedCandidateId && responses.length < maxRespondents;
   // Whether the respond tab should be shown
   const canAccessRespondTab = canSubmitNewResponse || editingResponseId || myResponseId;
 
@@ -854,18 +771,10 @@ export default function App() {
           </div>
 
           <div style={styles.manualSection}>
-            <h3 style={styles.manualHeading}>6. チャット機能</h3>
-            <p style={styles.manualText}>
-              「チャット」タブで参加者同士がメッセージをやりとりできます。
-              主催者は個別のダイレクトメッセージ（DM）も送信できます。
-            </p>
-          </div>
-
-          <div style={styles.manualSection}>
-            <h3 style={styles.manualHeading}>7. 主催者ログイン</h3>
+            <h3 style={styles.manualHeading}>6. 主催者ログイン</h3>
             <p style={styles.manualText}>
               別のブラウザからアクセスした場合、イベントページの「主催者ログイン」ボタンから
-              作成時に設定したパスワードでログインすると、主催者機能（日時確定、会場検索、DM、削除など）が使えるようになります。
+              作成時に設定したパスワードでログインすると、主催者機能（日時確定、会場検索、削除など）が使えるようになります。
             </p>
           </div>
 
@@ -1093,7 +1002,7 @@ export default function App() {
                     onChange={e => setNotificationThreshold(e.target.value)}
                   >
                     <option value="">選択してください</option>
-                    {[3, 5, 10, 15, 20, 30].map(n => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                       <option key={n} value={n}>{n}件</option>
                     ))}
                   </select>
@@ -1587,81 +1496,7 @@ export default function App() {
                 回答締切
               </div>
             )}
-            <button
-              style={{ ...styles.tab, ...(activeTab === 'chat' ? styles.tabActive : {}) }}
-              onClick={() => setActiveTab('chat')}
-            >
-              チャット {chatMessages.length > 0 && `(${chatMessages.length})`}
-            </button>
           </div>
-
-          {/* Chat Tab */}
-          {activeTab === 'chat' && (
-            <div style={styles.chatSection}>
-              <ErrorInline context="chat" />
-              <div style={styles.chatMessages}>
-                {chatMessages.length === 0 ? (
-                  <div style={styles.chatEmpty}>メッセージはまだありません</div>
-                ) : (
-                  chatMessages.map((msg) => (
-                    <div key={msg.id} style={{ ...styles.chatMessage, ...(msg.isOrganizer ? styles.chatMessageOrganizer : {}) }}>
-                      <div style={styles.chatMessageHeader}>
-                        <span style={styles.chatUser}>
-                          {msg.user}
-                          {msg.isOrganizer && <span style={styles.organizerBadge}>主催者</span>}
-                        </span>
-                        <span style={styles.chatTime}>{formatTime(msg.createdAt)}</span>
-                      </div>
-                      <div style={styles.chatText}>{msg.message}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-              {!isOrganizer && !currentUser && (
-                <div style={{ marginBottom: 8 }}>
-                  <input
-                    type="text"
-                    style={styles.chatInput}
-                    value={chatInput}
-                    onChange={() => {}}
-                    placeholder="チャットするには名前を入力してください"
-                    readOnly
-                  />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <input
-                      type="text"
-                      style={{ ...styles.chatInput, flex: 1 }}
-                      value={responderName}
-                      onChange={(e) => setResponderName(e.target.value)}
-                      placeholder="あなたの名前"
-                      maxLength={100}
-                    />
-                    <button
-                      style={styles.chatSendBtn}
-                      onClick={() => {
-                        if (responderName.trim()) setCurrentUser(responderName.trim());
-                      }}
-                    >
-                      設定
-                    </button>
-                  </div>
-                </div>
-              )}
-              {(isOrganizer || currentUser) && (
-                <div style={styles.chatInputRow}>
-                  <input
-                    type="text"
-                    style={styles.chatInput}
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="メッセージを入力..."
-                    onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                  />
-                  <button style={styles.chatSendBtn} onClick={sendChatMessage}>送信</button>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Status Tab */}
           {activeTab === 'status' && (
@@ -1729,7 +1564,7 @@ export default function App() {
                   {/* Responses List */}
                   {responses.length > 0 && (
                     <div style={styles.responsesList}>
-                      <div style={styles.cardLabel}>回答一覧（{responses.length}件）</div>
+                      <div style={styles.cardLabel}>回答一覧（{responses.length}/{maxRespondents}件）</div>
                       {responses.map(r => (
                         <div key={r.id} style={{
                           ...styles.responseCard,
@@ -1743,9 +1578,6 @@ export default function App() {
                             <div style={{ display: 'flex', gap: 8 }}>
                               {r.id === myResponseId && (
                                 <button style={styles.editBtn} onClick={() => startEditResponse(r)}>編集</button>
-                              )}
-                              {isOrganizer && (
-                                <button style={styles.dmBtn} onClick={() => { setDmTarget(r.name); setShowDmPanel(true); }}>DM</button>
                               )}
                             </div>
                           </div>
@@ -1789,6 +1621,13 @@ export default function App() {
               {fixedCandidateId && !editingResponseId && !myResponseId && (
                 <div style={styles.fixedNoticeBanner}>
                   <p>日時が確定済みのため、新規回答は受け付けていません。</p>
+                </div>
+              )}
+
+              {/* 回答者上限到達メッセージ */}
+              {!fixedCandidateId && !editingResponseId && responses.length >= maxRespondents && !myResponseId && (
+                <div style={styles.fixedNoticeBanner}>
+                  <p>回答者数が上限（{maxRespondents}人）に達しています。</p>
                 </div>
               )}
 
@@ -1872,45 +1711,6 @@ export default function App() {
             </>
           )}
 
-          {/* DM Overlay */}
-          {showDmPanel && (
-            <div style={styles.modalOverlay} onClick={() => setShowDmPanel(false)}>
-              <div style={styles.modalPanel} onClick={(e) => e.stopPropagation()}>
-                <div style={styles.modalHeader}>
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>ダイレクトメッセージ</span>
-                  <button style={styles.modalCloseBtn} onClick={() => setShowDmPanel(false)}>×</button>
-                </div>
-                <ErrorInline context="dm" />
-                <div style={styles.dmList}>
-                  {directMessages.filter(dm => dm.to === dmTarget).map((dm) => (
-                    <div key={dm.id} style={styles.dmMessage}>
-                      <div style={styles.dmMessageHeader}>
-                        <span style={styles.dmTo}>宛先: {dm.to}</span>
-                        <span style={styles.chatTime}>{formatTime(dm.createdAt)}</span>
-                      </div>
-                      <div style={styles.dmText}>{dm.message}</div>
-                    </div>
-                  ))}
-                </div>
-                {dmTarget && (
-                  <div style={styles.dmInputSection}>
-                    <div style={styles.dmTargetLabel}>宛先: {dmTarget}</div>
-                    <div style={styles.chatInputRow}>
-                      <input
-                        type="text"
-                        style={styles.chatInput}
-                        value={dmInput}
-                        onChange={(e) => setDmInput(e.target.value)}
-                        placeholder="DMを入力..."
-                        onKeyPress={(e) => e.key === 'Enter' && sendDm()}
-                      />
-                      <button style={styles.chatSendBtn} onClick={sendDm}>送信</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -2022,32 +1822,7 @@ const styles = {
   tab: { flex: 1, padding: 14, background: 'rgba(255,255,255,0.02)', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: 12, cursor: 'pointer' },
   tabActive: { background: 'rgba(255,255,255,0.08)', color: '#fff' },
 
-  // Chat styles
-  chatSection: { border: '1px solid rgba(255,255,255,0.08)' },
-  chatMessages: { height: 300, overflowY: 'auto', padding: 20 },
-  chatEmpty: { color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', padding: '40px 0' },
-  chatMessage: { marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.03)' },
-  chatMessageOrganizer: { borderLeft: '2px solid #fff' },
-  chatMessageHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
-  chatUser: { fontSize: 12, fontWeight: 500, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 },
-  organizerBadge: { fontSize: 9, padding: '2px 6px', background: '#fff', color: '#0a0a0a', fontWeight: 600, letterSpacing: 0.5 },
-  chatTime: { fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' },
-  chatText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 },
-  chatInputRow: { display: 'flex', gap: 1, borderTop: '1px solid rgba(255,255,255,0.08)' },
-  chatInput: { flex: 1, padding: 16, background: 'rgba(255,255,255,0.02)', border: 'none', color: '#fff', fontSize: 14, outline: 'none' },
-  chatSendBtn: { padding: '16px 24px', background: '#fff', border: 'none', color: '#0a0a0a', fontSize: 11, fontWeight: 500, cursor: 'pointer', letterSpacing: 1 },
-
-  // DM styles
-  dmBtn: { padding: '6px 12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', fontSize: 10, cursor: 'pointer', letterSpacing: 1 },
-  dmList: { flex: 1, overflowY: 'auto', padding: 20 },
-  dmMessage: { marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderLeft: '2px solid rgba(255,255,255,0.2)' },
-  dmMessageHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
-  dmTo: { fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.5 },
-  dmText: { fontSize: 14, color: '#fff', lineHeight: 1.5 },
-  dmInputSection: { padding: 20, borderTop: '1px solid rgba(255,255,255,0.08)' },
-  dmTargetLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 12, letterSpacing: 0.5 },
-
-  // Modal styles (shared by manual, org login, DM)
+  // Modal styles (shared by manual, org login)
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
   modalPanel: { width: '90%', maxWidth: 480, background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' },
   modalHeader: { padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },

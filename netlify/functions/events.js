@@ -98,15 +98,15 @@ export async function handler(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'id required' }) };
       }
 
-      // 期限切れイベントのクリーンアップ（候補日の最終日時から48時間後）
+      // 期限切れイベントのクリーンアップ（候補日の最終日の翌日）
       try {
         await sql`
           DELETE FROM events WHERE id IN (
             SELECT e.id FROM events e
             WHERE (
-              SELECT MAX(c->>'datetime')
+              SELECT (MAX(c->>'datetime'))::date + INTERVAL '1 day'
               FROM jsonb_array_elements(e.candidates) AS c
-            ) < (NOW() - INTERVAL '48 hours')::text
+            ) < NOW()
           )
         `;
       } catch (e) {

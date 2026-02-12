@@ -65,6 +65,18 @@ export async function handler(event) {
         };
       }
 
+      // 回答数上限チェック（最大10人）
+      const countResult = await sql`
+        SELECT COUNT(*)::int AS cnt FROM responses WHERE event_id = ${event_id}
+      `;
+      if (countResult[0].cnt >= 10) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ error: '回答者数が上限（10人）に達しています' })
+        };
+      }
+
       // 回答を追加
       const id = generateId();
       const answersJson = JSON.stringify(answers);
